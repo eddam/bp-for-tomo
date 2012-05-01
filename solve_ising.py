@@ -4,7 +4,7 @@ import math
 from math import exp, log1p
 from scipy import stats
 
-min_inf = -100
+min_inf = -10000
 
 #----------------Microconical Ising chain -----------------------------
 

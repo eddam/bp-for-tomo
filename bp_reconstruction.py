@@ -25,9 +25,9 @@ def _initialize_field(y, proj_operator, big_field=10):
             h_m_to_px[mu][inds] = big_field * np.sign(ratio)
         else:
             h_m_to_px[mu][inds] = 0.5 * (np.log1p(ratio) - \
-                               np.log1p(-ratio)) 
-    mask = np.abs(h_m_to_px) > big_field/2
-    h_m_to_px[mask] = np.sign(h_m_to_px[mask]) * big_field / 2
+                               np.log1p(-ratio))
+    mask = np.abs(h_m_to_px) > big_field/2.
+    h_m_to_px[mask] = np.sign(h_m_to_px[mask]) * big_field / 2.
     return h_m_to_px
 
 def _calc_hatf(h_m_to_px):
@@ -49,11 +49,7 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8):
             inds = _reorder(inds, l_x)
         Js = _calc_Jeff(inds, l_x, J)
         mu = i / int(l_x)
-        if i < 16:
-            h_m_to_px[mu][inds] = solve_line(h_px_to_m[mu][inds], Js,
-                        proj_value, verbose=False)
-        else:
-            h_m_to_px[mu][inds] = solve_line(h_px_to_m[mu][inds], Js,
+        h_m_to_px[mu][inds] = solve_line(h_px_to_m[mu][inds], Js,
                         proj_value)
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
