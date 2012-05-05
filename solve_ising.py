@@ -5,6 +5,7 @@ from math import exp, log1p
 from scipy import stats
 
 min_inf = -10000
+max_inf = 500
 
 #----------------Microconical Ising chain -----------------------------
 
@@ -37,7 +38,8 @@ def _build_logZp(h, J):
     logZp = logZp[:, 1:-1, :]
     # This is very important -- apparently
     logZp = np.maximum(logZp, min_inf)
-    #logZp = np.minimum(logZp, )
+    # when maxinf is too small this leads to problems at the boundaries
+    logZp = np.minimum(logZp, max_inf)
     return np.exp(logZp)
 
 
@@ -53,6 +55,27 @@ def _build_left_right(h, J):
     Tp = _build_logZp(h[::-1], J[::-1])
     Tp = Tp[::-1]
     return Zp, Tp
+
+def log_gaussian_weight(s, s0, beta=1.):
+    """
+    probability of s if the measure if s_0
+    With the hypothesis of Gaussian white noise, it is a Gaussian.
+
+    Parameters
+    ----------
+
+    s: float
+        sum of spins
+
+    s0: float
+        measure
+
+    beta: float
+        width of the Gaussian. The more noise on the projections, the
+        larger beta should be.
+    """
+    return np.maximum(-40, - beta * (s - s0)**2)
+
 
 def gaussian_weight(s, s0, beta=1.):
     """

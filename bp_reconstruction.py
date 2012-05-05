@@ -2,11 +2,18 @@ import numpy as np
 from solve_ising import solve_line
 
 def _reorder(inds, l_x):
+    """
+    Order inds in the order of a light ray of angle > pi/2, that is,
+    with increasing x (first coordinate) and decreasing y (second coordinate)
+    """
     ind_x, ind_y = inds / l_x, inds % l_x
     ind_y = l_x - ind_y
     return inds[np.argsort(ind_x * l_x + ind_y)]
 
 def _calc_Jeff(inds, l_x, J):
+    """
+    Coupling between two indices
+    """
     x, y = inds / l_x, inds % l_x
     dist = np.abs(x[1:] - x[:-1]) + np.abs(y[1:] - y[:-1])
     res = np.tanh(J) ** dist
@@ -15,6 +22,10 @@ def _calc_Jeff(inds, l_x, J):
 
 
 def _initialize_field(y, proj_operator, big_field=10):
+    """
+    Message passing from measurements to pixels, in the case where
+    there is no spatial coupling between spins.
+    """
     l_x = np.sqrt(proj_operator.shape[1])
     h_m_to_px = np.zeros((len(y)/l_x, l_x**2))
     for i, proj_value in enumerate(y):

@@ -83,8 +83,14 @@ def test_full_reco():
     n_dir = 8
     op = build_projection_operator(L, n_dir)
     y = (op * im.ravel()[:, np.newaxis]).ravel()
-    h_m_to_px = _initialize_field(y, op)
+    h_m_to_px = _initialize_field(y, op, big_field=10.)
+    assert np.all(h_m_to_px[0, :6] == -5)
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
-    for i in range(3):
+    sums = []
+    for i in range(6):
         h_m_to_px, h_px_to_m, h_sum = BP_step(h_m_to_px, h_px_to_m, y, op)
-    assert np.all((h_sum.reshape((L, L)) > 0) == (im > 0))
+        sums.append(h_sum)
+    # Check that segmentation is correct
+    assert np.all((sums[2].reshape((L, L)) > 0) == (im > 0))
+    # Check that rapidly, all spins are blocked
+    assert np.all(np.logical_or(sums[-1]<-8, sums[-1]>8))
