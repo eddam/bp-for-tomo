@@ -30,10 +30,10 @@ def microcanonical_bf(h, J, s0):
 def test_compare_bf_transfmatrix():
     mag_tmat = solve_microcanonical_h([0, 0, 0], [0.1, 0.1, 0.1], 1)
     mag_bf = microcanonical_bf([0, 0, 0], 0.1, 1)
-    assert np.allclose(mag_bf, mag_tmat, rtol=4.e-2)
+    assert np.allclose(mag_bf, mag_tmat, rtol=2.e-2)
     mag_tmat = solve_microcanonical_h([1, 1, -1], [0.1, 0.1, 0.1], 1)
     mag_bf = microcanonical_bf([1, 1, -1], 0.1, 1)
-    assert np.allclose(mag_bf, mag_tmat, rtol=4.e-2)
+    assert np.allclose(mag_bf, mag_tmat, rtol=2.e-2)
     # Works with large values as well
     mag_tmat = solve_microcanonical_h([10, 10, -10], [0.1, 0.1, 0.1], 1)
     mag_bf = microcanonical_bf([10, 10, -10], 0.1, 1)

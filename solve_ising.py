@@ -99,27 +99,32 @@ def solve_microcanonical_chain(h, J, s0, error=2):
     Zp, Tp = _build_left_right(h, J)
     # indices for the sum of spins
     u = np.arange(2 * N + 1)
-    u = u[:, None]
-    err = np.arange(-error, error + 1)[None, :]
+    errs = [0] #np.arange(-error, error + 1)
     # Us is the value of the magnetization
     Us = u - N
-    v = (s0 + 2*N - u + err).astype(np.int)
-    Vs = v - N
-    Vs[np.logical_or(v < 0, v >= 2*N + 1)] = 1.e5 # hack, we don't want this
+    #v = (s0 + 2*N - u + err).astype(np.int)
+    #Vs = v - N
+    #Vs[np.logical_or(v < 0, v >= 2*N + 1)] = 1.e5 # hack, we don't want this
     # to happen
-    v[np.logical_or(v < 0, v >= 2*N + 1)] = 0
+    #v[np.logical_or(v < 0, v >= 2*N + 1)] = 0
     # Now we write the probability of spin i, which is given by
     # proba[s_i] = sum_{u, v, s_{n-1}, s_{n+1}}
     #         Z_{i-1}(u,s_{n-1}) T_{n+1}(v,s_{n+1}) x
     #        exp[J(s_{n-1}s_n+s_{n+1}s_n] exp[h_n s_n] w(s_n+u+v)
     for si in range(0, N):
-        s_n = -1
-        # sum over u, v, s_m and s_p with broadcasting
-        prob[0, si] =  (Zp[si, u, 0] * Tp[si, v, 0] * \
-                np.exp(- h[si] * s_n) * gaussian_weight(- s_n + Us + Vs, s0)).sum()
-        s_n = 1
-        prob[1, si] =  (Zp[si, u, 1] * Tp[si, v, 1] * \
-            np.exp(- h[si] * s_n) * gaussian_weight(- s_n + Us + Vs, s0)).sum()
+        # sum over u, vwith broadcasting
+        for uu, UUs in zip(u, Us):
+            v = np.arange(s0 + 2*N - uu -1, s0 + 2*N -uu + 2., 2)
+            v = v[np.logical_and(v >= 0, v < 2*N + 1)]
+            for vv in v:
+                s_n = -1
+                prob[0, si] +=  Zp[si, uu, 0] * Tp[si, vv, 0] * \
+                    np.exp(- h[si] * s_n) * \
+                    gaussian_weight(- s_n + UUs + vv - N, s0)
+                s_n = 1
+                prob[1, si] +=  Zp[si, uu, 1] * Tp[si, vv, 1] * \
+                    np.exp(- h[si] * s_n) * \
+                    gaussian_weight(- s_n + UUs + vv - N, s0)
     return prob
 
 
@@ -184,10 +189,10 @@ def solve_microcanonical_chain_save(h, J, s0, error=2):
                 h[si] * s_n) * gaussian_weight(s_n + Us + Vs, s0)).sum()
     u, Us = u.ravel(), Us.ravel()
     # Manage boundaries
-    prob[0, 0] = (Tp[0, u, 0] * gaussian_weight(Us, s0)).sum()
-    prob[1, 0] = (Tp[0, u, 1] * gaussian_weight(Us, s0)).sum()
-    prob[0, -1] = (Zp[-1, u, 0] * gaussian_weight(Us, s0)).sum()
-    prob[1, -1] = (Zp[-1, u, 1] * gaussian_weight(Us, s0)).sum()
+    #prob[0, 0] = (Tp[0, u, 0] * gaussian_weight(Us, s0)).sum()
+    #prob[1, 0] = (Tp[0, u, 1] * gaussian_weight(Us, s0)).sum()
+    #prob[0, -1] = (Zp[-1, u, 0] * gaussian_weight(Us, s0)).sum()
+    #prob[1, -1] = (Zp[-1, u, 1] * gaussian_weight(Us, s0)).sum()
     return prob
 
 def solve_microcanonical_h(h, J, s0, error=1):
