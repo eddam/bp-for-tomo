@@ -41,10 +41,11 @@ def _build_logZp(np.ndarray[dtype=np.double_t, ndim=1] h not None,
               logZp[n - 1, v - 1, 0], J[n-1] + logZp[n - 1, v - 1, 1])
     logZp = logZp[:, 1:-1, :]
     # This is very important -- apparently
-    cdef float m = np.max(logZp)
-    logZp -= m/2.
-    # when maxinf is too small this leads to problems at the boundaries
     logZp = np.minimum(logZp, max_inf)
+    cdef float m = np.max(logZp)
+    if m > 200:
+        logZp -= m/2.
+    # when maxinf is too small this leads to problems at the boundaries
     logZp = np.maximum(logZp, min_inf)
     return (logZp)
 
@@ -141,6 +142,7 @@ def solve_microcanonical_chain_broad(np.ndarray[dtype=np.double_t, ndim=1]
     cdef np.ndarray[dtype=np.double_t, ndim=2] prob = np.zeros((2, N))
     cdef np.ndarray[dtype=np.double_t, ndim=3] Zp, Tp
     Zp, Tp = _build_left_right(h, J)
+    #print Zp.min(), Tp.min(), Zp.max(), Tp.max()
     Zp = np.exp(Zp)
     Tp = np.exp(Tp)
     # indices for the sum of spins
@@ -169,7 +171,11 @@ def solve_microcanonical_chain_broad(np.ndarray[dtype=np.double_t, ndim=1]
         prob[1, si] = (Zp[si, u, 1] * Tp[si, v, 1] *\
                     exp(- h[si] * s_n) * \
                     gaussian_weight(- s_n + u + Vs - N, s0)).sum()
-    return prob
+    mask = prob == 0
+    prob[mask] = 1
+    res = np.log(prob)
+    res[mask] = min_inf
+    return res
 
 
 @cython.boundscheck(False)
@@ -229,5 +235,5 @@ def solve_microcanonical_chain_pyx(np.ndarray[dtype=np.double_t, ndim=1]
                     Zp[si, uu, 1] + Tp[si, vv, 1]  \
                     - h[si] * s_n  \
                     + log_gaussian_weight(- s_n + uu + vv - 2*N, s0))
-    return np.exp(np.minimum(prob, max_inf))
+    return np.minimum(prob, max_inf)
 

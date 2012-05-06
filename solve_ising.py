@@ -134,12 +134,10 @@ def solve_microcanonical_h(h, J, s0, error=1):
     except FloatingPointError:
         print 'other'
         proba = solve_microcanonical_chain_pyx(h, J, s0)
-    ratio = (proba[1] - proba[0])/(proba[1] + proba[0])
-    ratio = np.maximum(-1 + 1.e-16, ratio)
-    ratio = np.minimum(1 - 1.e-16, ratio)
-    res = np.arctanh(ratio)
-    res[np.isnan(res)] = 0
-    res[np.isinf(res)] = 0
+    res = 0.5 * (proba[1] - proba[0])
+    big_field = 10
+    res[res > big_field] = big_field
+    res[res < -big_field] = -big_field
     return res
 
 
