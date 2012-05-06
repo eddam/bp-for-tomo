@@ -3,7 +3,7 @@ from scipy import ndimage, stats
 import math
 from math import exp, log1p
 from scipy import stats
-from _ising import _build_logZp, log_exp_plus_exp
+from _ising import _build_logZp, log_exp_plus_exp, solve_microcanonical_chain_pyx, solve_microcanonical_chain_broad 
 
 min_inf = -10000
 max_inf = 500
@@ -95,111 +95,45 @@ def solve_microcanonical_chain(h, J, s0, error=2):
     --------
     """
     N = len(h)
-    prob = np.zeros((2, N))
+    prob = min_inf * np.ones((2, N))
     Zp, Tp = _build_left_right(h, J)
     # indices for the sum of spins
     u = np.arange(2 * N + 1)
-    errs = [0] #np.arange(-error, error + 1)
     # Us is the value of the magnetization
     Us = u - N
-    #v = (s0 + 2*N - u + err).astype(np.int)
-    #Vs = v - N
-    #Vs[np.logical_or(v < 0, v >= 2*N + 1)] = 1.e5 # hack, we don't want this
-    # to happen
-    #v[np.logical_or(v < 0, v >= 2*N + 1)] = 0
     # Now we write the probability of spin i, which is given by
     # proba[s_i] = sum_{u, v, s_{n-1}, s_{n+1}}
     #         Z_{i-1}(u,s_{n-1}) T_{n+1}(v,s_{n+1}) x
     #        exp[J(s_{n-1}s_n+s_{n+1}s_n] exp[h_n s_n] w(s_n+u+v)
     for si in range(0, N):
-        # sum over u, vwith broadcasting
         for uu, UUs in zip(u, Us):
             v = np.arange(s0 + 2*N - uu -1, s0 + 2*N -uu + 2., 2)
             v = v[np.logical_and(v >= 0, v < 2*N + 1)]
             for vv in v:
                 s_n = -1
-                prob[0, si] +=  Zp[si, uu, 0] * Tp[si, vv, 0] * \
-                    np.exp(- h[si] * s_n) * \
-                    gaussian_weight(- s_n + UUs + vv - N, s0)
+                prob[0, si] = log_exp_plus_exp(prob[0, si],
+                    Zp[si, uu, 0] + Tp[si, vv, 0] \
+                    - h[si] * s_n  \
+                    + log_gaussian_weight(- s_n + UUs + vv - N, s0))
                 s_n = 1
-                prob[1, si] +=  Zp[si, uu, 1] * Tp[si, vv, 1] * \
-                    np.exp(- h[si] * s_n) * \
-                    gaussian_weight(- s_n + UUs + vv - N, s0)
-    return prob
-
-
-def solve_microcanonical_chain_save(h, J, s0, error=2):
-    """
-    Solve Ising chain for N spins, in the microcanonical formulation
-
-    Parameters
-    ----------
-    h: 1-d ndarray of length N
-        local field
-
-    J: 1-d ndarray of length N
-        local coupling between spin
-
-    s0: float
-        expected sum of spins
-
-    error: int
-        expected error on the projections.
-
-    Returns
-    -------
-    proba: 2xN array
-        proba[i, n] is the (not normalized) probability of spin n to
-        be s_i
-
-    Examples
-    --------
-    """
-    N = len(h)
-    prob = np.zeros((2, N))
-    Zp, Tp = _build_left_right(h, J)
-    # indices for the sum of spins
-    u = np.arange(2 * N + 1)
-    u = u[:, None, None, None]
-    # v = 
-    err = np.arange(-error, error + 1)[None, :, None, None]
-    Us = u - N
-    v = (s0 + 2*N - u + err).astype(np.int)
-    Vs = v - N
-    Vs[np.logical_or(v < 0, v >= 2*N + 1)] = 1.e5 # hack, we don't want this
-    # to happen
-    v[np.logical_or(v < 0, v >= 2*N + 1)] = 0
-    s_m = np.arange(2)[None, None, :, None]
-    S_m = 2*(s_m - 0.5)
-    s_p = np.arange(2)[None, None, None, :]
-    S_p = 2*(s_p - 0.5)
-    # Now we write the probability of spin i, which is given by
-    # proba[s_i] = sum_{u, v, s_{n-1}, s_{n+1}}
-    #         Z_{i-1}(u,s_{n-1}) T_{n+1}(v,s_{n+1}) x
-    #        exp[J(s_{n-1}s_n+s_{n+1}s_n] exp[h_n s_n] w(s_n+u+v)
-    for si in range(1, N-1):
-        s_n = -1
-        # sum over u, v, s_m and s_p with broadcasting
-        prob[0, si] =  (Zp[si - 1, u, s_m] * Tp[si + 1, v, s_p] * \
-                np.exp(J[si-1] * s_n * S_m + J[si] * s_n * S_p +
-                h[si] * s_n) * gaussian_weight(s_n + Us + Vs, s0)).sum()
-        s_n = 1
-        prob[1, si] =  (Zp[si - 1, u, s_m] * Tp[si + 1, v, s_p] * \
-            np.exp(J[si-1] * s_n * S_m + J[si] * s_n * S_p +
-                h[si] * s_n) * gaussian_weight(s_n + Us + Vs, s0)).sum()
-    u, Us = u.ravel(), Us.ravel()
-    # Manage boundaries
-    #prob[0, 0] = (Tp[0, u, 0] * gaussian_weight(Us, s0)).sum()
-    #prob[1, 0] = (Tp[0, u, 1] * gaussian_weight(Us, s0)).sum()
-    #prob[0, -1] = (Zp[-1, u, 0] * gaussian_weight(Us, s0)).sum()
-    #prob[1, -1] = (Zp[-1, u, 1] * gaussian_weight(Us, s0)).sum()
-    return prob
+                prob[1, si] = log_exp_plus_exp(prob[1, si],
+                    Zp[si, uu, 1] + Tp[si, vv, 1]  \
+                    - h[si] * s_n  \
+                    + log_gaussian_weight(- s_n + UUs + vv - N, s0))
+    return np.exp(prob)
 
 def solve_microcanonical_h(h, J, s0, error=1):
     """
     Compute local magnetization for microcanonical Ising chain
     """
-    proba = solve_microcanonical_chain(h, J, s0, error=error)
+    h = np.asarray(h).astype(np.float)
+    J = np.asarray(J).astype(np.float)
+    s0 = float(s0)
+    try:
+        proba = solve_microcanonical_chain_broad(h, J, s0)
+    except FloatingPointError:
+        print 'other'
+        proba = solve_microcanonical_chain_pyx(h, J, s0)
     ratio = (proba[1] - proba[0])/(proba[1] + proba[0])
     ratio = np.maximum(-1 + 1.e-16, ratio)
     ratio = np.minimum(1 - 1.e-16, ratio)
