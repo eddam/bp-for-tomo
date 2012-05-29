@@ -26,6 +26,7 @@ def _initialize_field(y, proj_operator, big_field=10):
     Message passing from measurements to pixels, in the case where
     there is no spatial coupling between spins.
     """
+    #TODO: use mask
     l_x = np.sqrt(proj_operator.shape[1])
     h_m_to_px = np.zeros((len(y)/l_x, l_x**2))
     for i, proj_value in enumerate(y):
@@ -48,16 +49,24 @@ def _calc_hatf(h_m_to_px):
         px_to_mu[:] = h_sum - mu_to_px
     return h_px_to_m, h_sum
 
-def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8):
+def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8,
+                        use_mask=True):
     ndir = len(h_m_to_px)
     l_x = np.sqrt(h_m_to_px.shape[1])
     # First we update h_m_to_px, by solving the Ising chain
     # the pixels are rotated so that the measure is horizontal
     h_tmp = np.copy(h_m_to_px)
+    if use_mask:
+        X, Y = np.ogrid[:l_x, :l_x]
+        mask = ((X - l_x/2)**2 + (Y - l_x/2)**2 <= (l_x/2)**2).ravel()
     for i, proj_value in enumerate(y):
         inds = proj_operator[i].indices
         if i > len(y)/2:
             inds = _reorder(inds, l_x)
+        mask_inds = mask[inds]
+        inds = inds[mask_inds]
+        if len(inds) == 0:
+            continue
         Js = _calc_Jeff(inds, l_x, J)
         mu = i / int(l_x)
         h_m_to_px[mu][inds] = solve_line(h_px_to_m[mu][inds], Js,
@@ -65,5 +74,6 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8):
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
+    h_sum[~mask] = 0
     return h_m_to_px, h_px_to_m, h_sum
 

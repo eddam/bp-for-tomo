@@ -65,7 +65,7 @@ def _build_left_right(np.ndarray[dtype=np.double_t, ndim=1] h,
     Tp = Tp[::-1]
     return Zp, Tp
 
-def gaussian_weight(s, s0, beta=1.):
+def gaussian_weight(s, s0, beta=4.):
     """
     probability of s if the measure if s_0
     With the hypothesis of Gaussian white noise, it is a Gaussian.
@@ -86,7 +86,7 @@ def gaussian_weight(s, s0, beta=1.):
     return np.exp(np.maximum(-40, - beta * (s - s0)**2))
 
 
-def log_gaussian_weight(s, s0, beta=1.):
+def log_gaussian_weight(s, s0, beta=4.):
     """
     probability of s if the measure if s_0
     With the hypothesis of Gaussian white noise, it is a Gaussian.
@@ -107,7 +107,7 @@ def log_gaussian_weight(s, s0, beta=1.):
     return np.maximum(-40, - beta * (s - s0)**2)
 
 @cython.boundscheck(False)
-def solve_microcanonical_chain_broad(np.ndarray[dtype=np.double_t, ndim=1]
+def solve_microcanonical_chain(np.ndarray[dtype=np.double_t, ndim=1]
                                 h not None,
                                 np.ndarray[dtype=np.double_t, ndim=1]
                                 J not None,

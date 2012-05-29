@@ -1,5 +1,6 @@
 from ..solve_ising import solve_microcanonical_h, \
-                          solve_microcanonical_chain, gaussian_weight
+                          gaussian_weight
+from .._ising import solve_microcanonical_chain
 from ..bp_reconstruction import BP_step, _initialize_field, _calc_hatf
 from ..build_projection_operator import build_projection_operator
 import numpy as np
@@ -16,28 +17,30 @@ def microcanonical_bf(h, J, s0):
     # minus energy
     minusH = (h * spins).sum(axis=1) + \
                 J * (spins[:, 1:] * spins[:, :-1]).sum(axis=1)
-    proba_config = np.exp(minusH) * gaussian_weight(spins.sum(axis=1), s0)
+    proba_config = np.exp(minusH) * gaussian_weight(spins.sum(axis=1), s0, beta=10)
     proba_spin = np.zeros((2, 3))
     for s in range(3):
         proba_spin[0, s] = (proba_config[spins[:, s] == -1]).sum()
         proba_spin[1, s] = (proba_config[spins[:, s] == 1]).sum()
-    proba_spin = np.minimum(proba_spin, 10**18)
-    print proba_spin
-    res =  np.arctanh((proba_spin[1] - proba_spin[0])/
-                    (proba_spin[1] + proba_spin[0]))
+    res = 0.5 * (np.log(proba_spin[1]) - np.log(proba_spin[0]))
+    res[res > 10] = 10
+    res[res < -10] = -10
     return res
 
 def test_compare_bf_transfmatrix():
     mag_tmat = solve_microcanonical_h([0, 0, 0], [0.1, 0.1, 0.1], 1)
     mag_bf = microcanonical_bf([0, 0, 0], 0.1, 1)
-    assert np.allclose(mag_bf, mag_tmat, rtol=4.e-2)
+    assert np.allclose(mag_bf, mag_tmat, rtol=1.e-2)
     mag_tmat = solve_microcanonical_h([1, 1, -1], [0.1, 0.1, 0.1], 1)
     mag_bf = microcanonical_bf([1, 1, -1], 0.1, 1)
-    assert np.allclose(mag_bf, mag_tmat, rtol=4.e-2)
+    assert np.allclose(mag_bf, mag_tmat, rtol=1.e-2)
     # Works with large values as well
     mag_tmat = solve_microcanonical_h([10, 10, -10], [0.1, 0.1, 0.1], 1)
     mag_bf = microcanonical_bf([10, 10, -10], 0.1, 1)
-    #assert np.allclose(mag_bf, mag_tmat, rtol=5.e-2)
+    assert np.allclose(mag_bf, mag_tmat, rtol=1.e-2)
+    mag_tmat = solve_microcanonical_h([10, 10, -10], [0.1, 0.1, 0.1], -1)
+    mag_bf = microcanonical_bf([10, 10, -10], 0.1, -1)
+    assert np.allclose(mag_bf, mag_tmat, rtol=1.e-2)
 
 
 def test_solve_chain():
@@ -77,14 +80,19 @@ def test_full_reco():
     Regression test: a real-life example
     """
     L = 16
+    # Build image
     im = -1 * np.ones((L, L))
     im[6:12, 6:12] = 1
     im[9, 9:12] = -1
     n_dir = 8
+    X, Y = np.ogrid[:L, :L]
+    mask = ((X - L/2)**2 + (Y - L/2)**2 <= (L/2)**2)
+    im[~mask] = 0
+    # Operator
     op = build_projection_operator(L, n_dir)
+    # Measurements (noise-free)
     y = (op * im.ravel()[:, np.newaxis]).ravel()
     h_m_to_px = _initialize_field(y, op, big_field=10.)
-    assert np.all(h_m_to_px[0, :6] == -5)
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
     sums = []
     for i in range(6):
@@ -93,4 +101,5 @@ def test_full_reco():
     # Check that segmentation is correct
     assert np.all((sums[2].reshape((L, L)) > 0) == (im > 0))
     # Check that rapidly, all spins are blocked
-    assert np.all(np.logical_or(sums[-1]<-8, sums[-1]>8))
+    assert np.all(np.logical_or(sums[-1][mask.ravel()]<-8,
+                                        sums[-1][mask.ravel()]>8))
