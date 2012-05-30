@@ -224,7 +224,6 @@ def solve_microcanonical_h(h, J, s0, error=1):
 
 # ------------------ Solving Ising model for one projection -----------
 
-
 def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False):
     """
     Solve Ising chain

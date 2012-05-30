@@ -65,7 +65,7 @@ def _build_left_right(np.ndarray[dtype=np.double_t, ndim=1] h,
     Tp = Tp[::-1]
     return Zp, Tp
 
-def gaussian_weight(s, s0, beta=4.):
+def gaussian_weight(s, s0, beta=2.):
     """
     probability of s if the measure if s_0
     With the hypothesis of Gaussian white noise, it is a Gaussian.
@@ -86,7 +86,7 @@ def gaussian_weight(s, s0, beta=4.):
     return np.exp(np.maximum(-40, - beta * (s - s0)**2))
 
 
-def log_gaussian_weight(s, s0, beta=4.):
+def log_gaussian_weight(s, s0, beta=2.):
     """
     probability of s if the measure if s_0
     With the hypothesis of Gaussian white noise, it is a Gaussian.
@@ -111,7 +111,7 @@ def solve_microcanonical_chain(np.ndarray[dtype=np.double_t, ndim=1]
                                 h not None,
                                 np.ndarray[dtype=np.double_t, ndim=1]
                                 J not None,
-                                float s0):
+                                float s0, int tol=1):
     """
     Solve Ising chain for N spins, in the microcanonical formulation
 
@@ -153,11 +153,15 @@ def solve_microcanonical_chain(np.ndarray[dtype=np.double_t, ndim=1]
     cdef np.ndarray[dtype=np.int_t, ndim=2] err = \
                     np.arange(-error, error + 1)[None, :]
     cdef np.ndarray[dtype=np.int_t, ndim=2] v
-    cdef np.ndarray[dtype=np.int_t, ndim=2] Vs
+    cdef np.ndarray[dtype=np.double_t, ndim=2] Vs
     v = (s0 + 2*N - u + err).astype(np.int)
-    v = np.arange(s0 + 2*N -1, s0 + 2*N + 2, 
-                2).astype(np.int)[np.newaxis, :] - u
-    Vs = v - N
+    # v is the index, Vs is the sum
+    round_s0 = np.round(s0)
+    tmp =  np.arange(round_s0 + 2*N - tol, round_s0 + 2*N + tol + 1, 
+                    2)[np.newaxis, :] - u
+    v = tmp.astype(np.int)
+    Vs = tmp - N
+    #Vs = np.arange(s0 + N - 1, s0 + N + 2)[np.newaxis, :] - u.astype(np.float)
     Vs[np.logical_or(v < 0, v >= 2*N + 1)] = 1.e5 # gaussian_weight excludes  
     v[np.logical_or(v < 0, v >= 2*N + 1)] = 0
     # Now we write the probability of spin i
@@ -183,7 +187,7 @@ def solve_microcanonical_chain_pyx(np.ndarray[dtype=np.double_t, ndim=1]
                                 h not None,
                                 np.ndarray[dtype=np.double_t, ndim=1]
                                 J not None,
-                                float s0):
+                                float s0, int tol=1):
     """
     Solve Ising chain for N spins, in the microcanonical formulation
 
@@ -222,7 +226,8 @@ def solve_microcanonical_chain_pyx(np.ndarray[dtype=np.double_t, ndim=1]
     cdef int si, uu, vv, s_n
     for si in range(0, N):
         for uu in u:
-            v = np.arange(s0 + 2*N - uu -1, s0 + 2*N -uu + 2, 2).astype(np.int)
+            v = np.arange(s0 + 2*N - uu - tol,
+                        s0 + 2*N -uu + tol + 1, 2).astype(np.int)
             v = v[np.logical_and(v >= 0, v < 2*N + 1)]
             for vv in v:
                 s_n = -1

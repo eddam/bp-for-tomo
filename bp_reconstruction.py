@@ -33,7 +33,7 @@ def _initialize_field(y, proj_operator, big_field=10):
         inds = proj_operator[i].indices
         mu = i / int(l_x)
         ratio = proj_value / float(len(inds))
-        if np.abs(ratio) == 1:
+        if np.abs(ratio) >= 1:
             h_m_to_px[mu][inds] = big_field * np.sign(ratio)
         else:
             h_m_to_px[mu][inds] = 0.5 * (np.log1p(ratio) - \
