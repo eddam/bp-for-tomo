@@ -3,6 +3,7 @@ from ..solve_ising import solve_microcanonical_h, \
 from .._ising import solve_microcanonical_chain
 from ..bp_reconstruction import BP_step, _initialize_field, _calc_hatf
 from ..build_projection_operator import build_projection_operator
+from ..util import generate_synthetic_data
 import numpy as np
 
 
@@ -75,7 +76,7 @@ def test_solve_chain():
     assert set(np.argsort(proba[1] / proba[0])[:4]) == set([0, 1, 2, 3])
 
 
-def test_full_reco():
+def test_full_reco_microcan():
     """
     Regression test: a real-life example
     """
@@ -103,3 +104,28 @@ def test_full_reco():
     # Check that rapidly, all spins are blocked
     assert np.all(np.logical_or(sums[-1][mask.ravel()]<-8,
                                         sums[-1][mask.ravel()]>8))
+
+def test_full_reco_can():
+    """
+    Regression test: this larger example uses the canonical formulation
+    """
+    L = 64
+    im = generate_synthetic_data(L)
+    im -= 0.5
+    im *= 2
+    X, Y = np.ogrid[:L, :L]
+    mask = ((X - L/2)**2 + (Y - L/2)**2 <= (L/2)**2)
+    im[~mask] = 0
+    # Build projection data
+    n_dir = 16
+    op = build_projection_operator(L, n_dir)
+    y = (op * im.ravel()[:, np.newaxis]).ravel()
+    sums = []
+    h_m_to_px = _initialize_field(y, op)
+    h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
+    for i in range(6):
+        print "iter %d" %i
+        h_m_to_px, h_px_to_m, h_sum = BP_step(h_m_to_px, h_px_to_m, y, op, damping=0.9)
+        sums.append(h_sum)
+    err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
+    assert err[-1] == 0

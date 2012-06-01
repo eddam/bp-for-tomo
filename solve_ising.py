@@ -3,7 +3,7 @@ from scipy import ndimage, stats
 import math
 from math import exp, log1p
 from scipy import stats
-from _ising import _build_logZp, log_exp_plus_exp, solve_microcanonical_chain_pyx, solve_microcanonical_chain 
+from _ising import _build_logZp, log_exp_plus_exp, solve_microcanonical_chain_pyx, solve_microcanonical_chain
 from tan_tan import fast_mag_chain, fast_mag_chain_nu
 
 #-------------------------- Canonical formulation ----------------
@@ -55,6 +55,8 @@ def solve_canonical_h(h, J, y):
     epsilon=.0001
     hext = 0
     N = len(h) 
+    y = min(y, N)
+    y = max(y, -N)
     mag_tot = mag_chain(h, J, hext)
     if mag_tot < y:
         hmin = 0
@@ -92,20 +94,6 @@ max_inf = 500
 #----------------Microconical Ising chain -----------------------------
 
 
-def _build_left_right(h, J):
-    """
-    Build two partial partition functions, left and right.
-
-    For computing the right partition function Tp, we just reverse the order
-    of h and J, and compute the left partition function, and then reverse its
-    order.
-    """
-    h = np.asarray(h).astype(np.float)
-    J = np.asarray(J).astype(np.float)
-    Zp = _build_logZp(h, J)
-    Tp = _build_logZp(h[::-1], J[::-1])
-    Tp = Tp[::-1]
-    return Zp, Tp
 
 def log_gaussian_weight(s, s0, beta=4.):
     """
@@ -147,61 +135,6 @@ def gaussian_weight(s, s0, beta=4.):
         larger beta should be.
     """
     return np.exp(np.maximum(-40, - beta * (s - s0)**2))
-
-def solve_microcanonical_chain_old(h, J, s0, error=2):
-    """
-    Solve Ising chain for N spins, in the microcanonical formulation
-
-    Parameters
-    ----------
-    h: 1-d ndarray of length N
-        local field
-
-    J: 1-d ndarray of length N
-        local coupling between spin
-
-    s0: float
-        expected sum of spins
-
-    error: int
-        expected error on the projections.
-
-    Returns
-    -------
-    proba: 2xN array
-        proba[i, n] is the (not normalized) probability of spin n to
-        be s_i
-
-    Examples
-    --------
-    """
-    N = len(h)
-    prob = min_inf * np.ones((2, N))
-    Zp, Tp = _build_left_right(h, J)
-    # indices for the sum of spins
-    u = np.arange(2 * N + 1)
-    # Us is the value of the magnetization
-    Us = u - N
-    # Now we write the probability of spin i, which is given by
-    # proba[s_i] = sum_{u, v, s_{n-1}, s_{n+1}}
-    #         Z_{i-1}(u,s_{n-1}) T_{n+1}(v,s_{n+1}) x
-    #        exp[J(s_{n-1}s_n+s_{n+1}s_n] exp[h_n s_n] w(s_n+u+v)
-    for si in range(0, N):
-        for uu, UUs in zip(u, Us):
-            v = np.arange(s0 + 2*N - uu -1, s0 + 2*N -uu + 2., 2)
-            v = v[np.logical_and(v >= 0, v < 2*N + 1)]
-            for vv in v:
-                s_n = -1
-                prob[0, si] = log_exp_plus_exp(prob[0, si],
-                    Zp[si, uu, 0] + Tp[si, vv, 0] \
-                    - h[si] * s_n  \
-                    + log_gaussian_weight(- s_n + UUs + vv - N, s0))
-                s_n = 1
-                prob[1, si] = log_exp_plus_exp(prob[1, si],
-                    Zp[si, uu, 1] + Tp[si, vv, 1]  \
-                    - h[si] * s_n  \
-                    + log_gaussian_weight(- s_n + UUs + vv - N, s0))
-    return np.exp(prob)
 
 def solve_microcanonical_h(h, J, s0, error=1):
     """
@@ -259,7 +192,7 @@ def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False):
     field[mask_blocked] = big_field * np.sign(field[mask_blocked])
     if np.all(mask_blocked) and np.abs(np.sign(field).sum() - y) < 0.1:
         return (1.5 - onsager) * field
-    elif False: #np.sum(~mask_blocked) > 25:
+    elif np.sum(~mask_blocked) > 25:
         hloc = solve_canonical_h(field, Js, y)
         mask_blocked = np.abs(hloc) > big_field
         hloc[mask_blocked] = big_field * np.sign(hloc[mask_blocked])
@@ -278,22 +211,5 @@ def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False):
         if verbose:
             print hloc
         return hloc
-
-
-# ---------------- Initialization ------------------------------
-
-def initialize_field(y, l_x, big_field=10):
-    h_m_to_px = np.zeros((len(y), l_x))
-    for dr in range(ndir):
-        ratio = y[dr]/float(L)
-        ratio = np.maximum(-1 + 1.e-15, ratio)
-        ratio = np.minimum(1 - 1.e-15, ratio)
-        h_m_to_px[dr] = 0.5 * (np.log1p(ratio) - \
-                               np.log1p(-ratio))[:, np.newaxis]
-    mask = np.abs(h_m_to_px) > big_field/2
-    h_m_to_px[mask] = np.sign(h_m_to_px[mask]) * big_field
-    return h_m_to_px
-
-
 
 
