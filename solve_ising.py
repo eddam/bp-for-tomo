@@ -31,6 +31,7 @@ def mag_chain(h, J, hext, full_output=False):
     else:
         return magtot
 
+#@profile
 def solve_canonical_h(h, J, y):
     """
     Solve Ising chain in the canonical formulation.
@@ -52,7 +53,7 @@ def solve_canonical_h(h, J, y):
     hloc: 1-d ndarray of floats
         local magnetization
     """
-    epsilon=.0001
+    epsilon= .02
     hext = 0
     N = len(h) 
     y = min(y, N)
@@ -157,7 +158,8 @@ def solve_microcanonical_h(h, J, s0, error=1):
 
 # ------------------ Solving Ising model for one projection -----------
 
-def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False):
+def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False,
+                                                        use_micro=False):
     """
     Solve Ising chain
 
@@ -192,7 +194,7 @@ def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False):
     field[mask_blocked] = big_field * np.sign(field[mask_blocked])
     if np.all(mask_blocked) and np.abs(np.sign(field).sum() - y) < 0.1:
         return (1.5 - onsager) * field
-    elif np.sum(~mask_blocked) > 25:
+    elif use_micro is False or np.sum(~mask_blocked) > 25:
         hloc = solve_canonical_h(field, Js, y)
         mask_blocked = np.abs(hloc) > big_field
         hloc[mask_blocked] = big_field * np.sign(hloc[mask_blocked])

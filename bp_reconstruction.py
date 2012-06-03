@@ -30,7 +30,7 @@ def _initialize_field(y, proj_operator, big_field=10):
     l_x = np.sqrt(proj_operator.shape[1])
     h_m_to_px = np.zeros((len(y)/l_x, l_x**2))
     for i, proj_value in enumerate(y):
-        inds = proj_operator[i].indices
+        inds = proj_operator.rows[i]
         mu = i / int(l_x)
         ratio = proj_value / float(len(inds))
         if np.abs(ratio) >= 1:
@@ -50,7 +50,7 @@ def _calc_hatf(h_m_to_px):
     return h_px_to_m, h_sum
 
 def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8,
-                        use_mask=True):
+                        use_mask=True, use_micro=False):
     ndir = len(h_m_to_px)
     l_x = np.sqrt(h_m_to_px.shape[1])
     # First we update h_m_to_px, by solving the Ising chain
@@ -60,7 +60,7 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8,
         X, Y = np.ogrid[:l_x, :l_x]
         mask = ((X - l_x/2)**2 + (Y - l_x/2)**2 <= (l_x/2)**2).ravel()
     for i, proj_value in enumerate(y):
-        inds = proj_operator[i].indices
+        inds = np.array(proj_operator.rows[i])
         if i > len(y)/2:
             inds = _reorder(inds, l_x)
         mask_inds = mask[inds]
@@ -70,7 +70,7 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8,
         Js = _calc_Jeff(inds, l_x, J)
         mu = i / int(l_x)
         h_m_to_px[mu][inds] = solve_line(h_px_to_m[mu][inds], Js,
-                        proj_value)
+                        proj_value, use_micro=use_micro)
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
