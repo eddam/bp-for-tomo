@@ -158,8 +158,7 @@ def solve_microcanonical_h(h, J, s0, error=1):
 
 # ------------------ Solving Ising model for one projection -----------
 
-def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False,
-                                                        use_micro=False):
+def solve_line(field, Js, y, onsager=1, big_field=400, use_micro=False):
     """
     Solve Ising chain
 
@@ -169,20 +168,17 @@ def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False,
     field: 1-d ndarray
         Local field on the spins
 
-    y: float
-        Sum of the spins (value of the projection)
-
-    J: float
+    Js: float
         Coupling between spins
 
-    mask_res: 1-d ndarray of bools, same shape as field
-        Mask of already blocked spins. mask_res is equal to +1 or -1
-        for blocked spins, and 0 for spins to be determined.
+    y: float
+        Sum of the spins (value of the projection)
 
     onsager: float
 
     big_field: float
-        FIXME: do we need big_field here
+
+    use_micro: bool, default False
 
     Returns
     -------
@@ -201,17 +197,10 @@ def solve_line(field, Js, y, onsager=1, big_field=10, verbose=False,
         hloc -= onsager * field
         return hloc
     else:
-        if verbose:
-            print "new chain"
-            print field, Js, y
         hloc = solve_microcanonical_h(field, Js, y)
         mask_blocked = np.abs(hloc) > big_field
         hloc[mask_blocked] = big_field * np.sign(hloc[mask_blocked])
-        if verbose:
-            print hloc
         hloc -= onsager * field
-        if verbose:
-            print hloc
         return hloc
 
 

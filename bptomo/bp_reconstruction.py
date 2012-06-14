@@ -1,5 +1,17 @@
 import numpy as np
 from solve_ising import solve_line
+try:
+    from joblib import Parallel, delayed
+    joblib_import = True
+except ImportError:
+    joblib_import = False
+if not joblib_import:
+    try:
+        from sklearn.externals.joblib import Parallel, delayed
+        joblib_import = True
+    except ImportError:
+        joblib_import = False
+
 
 def _reorder(inds, l_x):
     """
@@ -21,12 +33,11 @@ def _calc_Jeff(inds, l_x, J):
     return res
 
 
-def _initialize_field(y, proj_operator, big_field=10):
+def _initialize_field(y, proj_operator, big_field=400):
     """
     Message passing from measurements to pixels, in the case where
     there is no spatial coupling between spins.
     """
-    #TODO: use mask
     l_x = np.sqrt(proj_operator.shape[1])
     h_m_to_px = np.zeros((len(y)/l_x, l_x**2))
     for i, proj_value in enumerate(y):
@@ -61,26 +72,79 @@ def _calc_hatf_partial_dir(h_px_to_m, delta_h, mu):
     h_px_to_m[mu] = tmp[:]
     return h_px_to_m
 
-def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8,
+def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
                         use_mask=True, use_micro=False):
+    """
+    One iteration of BP (belief propagation), with messages updated
+    after all new messages have been computed. A strong damping is needed
+    with this update method.
+
+    Parameters
+    ----------
+
+    h_m_to_px: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetizations (measure to field). The frame is the one of the
+        non-rotated image (ie, Ising chains are taken at an angle
+        corresponding to the projection)
+
+    h_px_to_m: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetic field, determined by the other measures. The frame
+        is the one of the non-rotated image (ie, Ising chains are taken at
+        an angle corresponding to the projection)
+
+    y: ndarray of shape ndir*L (1-D)
+        Array that contains all measures (sum of spins along rays)
+
+    proj_operator: sparse matrix, in lil format
+        The projection operator (with only 1s in non-zero entries)
+
+    J: float
+        Amplitude of the coupling between spins
+
+    use_mask: bool
+        If True, there are no spins outside the central circle
+
+    use_micro: bool
+        If True, a microcanonical computation is performed for short chains,
+        or chains with few non-blocked spins. If False, only canonical
+        computations are performed.
+
+    Returns
+    -------
+
+    h_m_to_px, h_px_to_m, h_sum
+
+    h_m_to_px and h_px_to_m are the new iterates
+
+    h_sum is the sum over all directions of h_m_to_px, from which the marginal
+    of a spin to be +1 or -1 can be computed.
+    """
     ndir = len(h_m_to_px)
+    # Heuristic value that works well for the damping factor
+    # The more projections, the more damping we need
+    damping = 1 - 1.6/ndir
     l_x = np.sqrt(h_m_to_px.shape[1])
-    # First we update h_m_to_px, by solving the Ising chain
-    # the pixels are rotated so that the measure is horizontal
     h_tmp = np.copy(h_m_to_px)
     if use_mask:
         X, Y = np.ogrid[:l_x, :l_x]
         mask = ((X - l_x/2)**2 + (Y - l_x/2)**2 <= (l_x/2)**2).ravel()
     for i, proj_value in enumerate(y):
+        # Which pixels are in this measurement?
         inds = np.array(proj_operator.rows[i])
+        # How are they ordered?
         if i > len(y)/2:
             inds = _reorder(inds, l_x)
+        # Handle pixels outside circle -- remove them
         mask_inds = mask[inds]
         inds = inds[mask_inds]
         if len(inds) == 0:
             continue
+        # effective couplings
         Js = _calc_Jeff(inds, l_x, J)
-        mu = i / int(l_x)
+        mu = i / int(l_x) # angle number
+        # Solve the chain
         h_m_to_px[mu][inds] = solve_line(h_px_to_m[mu][inds], Js,
                         proj_value, use_micro=use_micro)
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
@@ -89,12 +153,152 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1, damping=0.8,
     h_sum[~mask] = 0
     return h_m_to_px, h_px_to_m, h_sum
 
-def BP_step_always_update(h_m_to_px, h_px_to_m, y, proj_operator, 
-                    J=.1, damping=0.8, use_mask=True, use_micro=False):
+
+def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
+                        use_mask=True, use_micro=False):
+    """
+    One iteration of BP (belief propagation), with messages updated
+    after all new messages have been computed. A strong damping is needed
+    with this update method. This function is parallelized (used as many
+    procs as possible !)
+
+    Parameters
+    ----------
+
+    h_m_to_px: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetizations (measure to field). The frame is the one of the
+        non-rotated image (ie, Ising chains are taken at an angle
+        corresponding to the projection)
+
+    h_px_to_m: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetic field, determined by the other measures. The frame
+        is the one of the non-rotated image (ie, Ising chains are taken at
+        an angle corresponding to the projection)
+
+    y: ndarray of shape ndir*L (1-D)
+        Array that contains all measures (sum of spins along rays)
+
+    proj_operator: sparse matrix, in lil format
+        The projection operator (with only 1s in non-zero entries)
+
+    J: float
+        Amplitude of the coupling between spins
+
+    use_mask: bool
+        If True, there are no spins outside the central circle
+
+    use_micro: bool
+        If True, a microcanonical computation is performed for short chains,
+        or chains with few non-blocked spins. If False, only canonical
+        computations are performed.
+
+    Returns
+    -------
+
+    h_m_to_px, h_px_to_m, h_sum
+
+    h_m_to_px and h_px_to_m are the new iterates
+
+    h_sum is the sum over all directions of h_m_to_px, from which the marginal
+    of a spin to be +1 or -1 can be computed.
+    """
+    if not joblib_import:
+        print "joblib could not be imported!"
     ndir = len(h_m_to_px)
+    # Heuristic value that works well for the damping factor
+    # The more projections, the more damping we need
+    damping = 1 - 1.6/ndir
     l_x = np.sqrt(h_m_to_px.shape[1])
-    # First we update h_m_to_px, by solving the Ising chain
-    # the pixels are rotated so that the measure is horizontal
+    h_tmp = np.copy(h_m_to_px)
+    if use_mask:
+        X, Y = np.ogrid[:l_x, :l_x]
+        mask = ((X - l_x/2)**2 + (Y - l_x/2)**2 <= (l_x/2)**2).ravel()
+    inds_all = []
+    J_all = []
+    # We should not recompute this every time, but pass to the function
+    # the indices of the chains, and the effective coupling
+    for i, proj_value in enumerate(y):
+        # Which pixels are in this measurement?
+        inds = np.array(proj_operator.rows[i])
+        # How are they ordered?
+        if i > len(y)/2:
+            inds = _reorder(inds, l_x)
+        # Handle pixels outside circle -- remove them
+        mask_inds = mask[inds]
+        inds = inds[mask_inds]
+        inds_all.append(inds)
+        if len(inds) == 0:
+            continue
+        # effective couplings
+        Js = _calc_Jeff(inds, l_x, J)
+        J_all.append(Js)
+        mu = i / int(l_x) # angle number
+    # Solve the chain
+    res = Parallel(n_jobs=-1, verbose=0)(delayed(solve_line)(h_px_to_m[i/int(l_x)][inds], Js, proj_value, use_micro=use_micro) for i, (inds, Js, proj_value) in enumerate(zip(inds_all, J_all, y)))
+    for i, (inds, resi) in enumerate(zip(inds_all, res)):
+        h_m_to_px[i/int(l_x)][inds] = resi
+    h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
+    # Then we update h_px_to_m
+    h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
+    h_sum[~mask] = 0
+    return h_m_to_px, h_px_to_m, h_sum
+
+def BP_step_always_update(h_m_to_px, h_px_to_m, y, proj_operator,
+                    J=.1, use_mask=True, use_micro=False):
+    """
+    One iteration of BP (belief propagation), with messages updated
+    after each resolution of an Ising chain.
+
+    A new random permutation of the chains is computed to determine the
+    order in which the chains are processed.
+
+    Parameters
+    ----------
+
+    h_m_to_px: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetizations (measure to field). The frame is the one of the
+        non-rotated image (ie, Ising chains are taken at an angle
+        corresponding to the projection)
+
+    h_px_to_m: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetic field, determined by the other measures. The frame
+        is the one of the non-rotated image (ie, Ising chains are taken at
+        an angle corresponding to the projection)
+
+    y: ndarray of shape ndir*L (1-D)
+        Array that contains all measures (sum of spins along rays)
+
+    proj_operator: sparse matrix, in lil format
+        The projection operator (with only 1s in non-zero entries)
+
+    J: float
+        Amplitude of the coupling between spins
+
+    use_mask: bool
+        If True, there are no spins outside the central circle
+
+    use_micro: bool
+        If True, a microcanonical computation is performed for short chains,
+        or chains with few non-blocked spins. If False, only canonical
+        computations are performed.
+
+    Returns
+    -------
+
+    h_m_to_px, h_px_to_m, h_sum
+
+    h_m_to_px and h_px_to_m are the new iterates
+
+    h_sum is the sum over all directions of h_m_to_px, from which the marginal
+    of a spin to be +1 or -1 can be computed.
+    """
+
+    ndir = len(h_m_to_px)
+    l_x = np.sqrt(h_m_to_px.shape[1]) 
     h_tmp = np.copy(h_m_to_px)
     if use_mask:
         X, Y = np.ogrid[:l_x, :l_x]
@@ -113,7 +317,7 @@ def BP_step_always_update(h_m_to_px, h_px_to_m, y, proj_operator,
         mu = measure_index / int(l_x)
         h_m_to_px_line = solve_line(h_px_to_m[mu][inds], Js,
                         proj_value, use_micro=use_micro)
-        damping = 0.2
+        damping = 0.5
         h_m_to_px_line = (1 - damping) * h_m_to_px_line \
                             + damping * h_tmp[mu][inds]
         h_m_to_px[mu][inds] = h_m_to_px_line[:]
@@ -126,7 +330,9 @@ def BP_step_always_update(h_m_to_px, h_px_to_m, y, proj_operator,
 
 def _order_dir(ndir, batch_nb=8):
     """
-    Change the order of directions so that they are spaced enough
+    Change the order of directions so that they are spaced enough;
+    If there are ndir directions, they are processed in the order
+    i + j * ndir / 8 for j in range(0, 8), for i in range(0, ndir/8)
     """
     dirs = range(ndir)
     step = ndir / batch_nb
@@ -134,7 +340,57 @@ def _order_dir(ndir, batch_nb=8):
     return sum(alldirs, [])
 
 def BP_step_update_direction(h_m_to_px, h_px_to_m, y, proj_operator,
-                    J=.1, damping=0.8, use_mask=True, use_micro=False):
+                    J=.1, use_mask=True, use_micro=False):
+    """
+    One iteration of BP (belief propagation), with messages updated
+    after all messages corresponding to one angle have been computed.
+
+    The directions are processed so that closeby directions are not processed
+    together. If there are ndir directions, they are processed in the order
+    i + j * ndir / 8 for j in range(0, 8), for i in range(0, ndir/8)
+
+    Parameters
+    ----------
+    h_m_to_px: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetizations (measure to field). The frame is the one of the
+        non-rotated image (ie, Ising chains are taken at an angle
+        corresponding to the projection)
+
+    h_px_to_m: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetic field, determined by the other measures. The frame
+        is the one of the non-rotated image (ie, Ising chains are taken at
+        an angle corresponding to the projection)
+
+    y: ndarray of shape ndir*L (1-D)
+        Array that contains all measures (sum of spins along rays)
+
+    proj_operator: sparse matrix, in lil format
+        The projection operator (with only 1s in non-zero entries)
+
+    J: float
+        Amplitude of the coupling between spins
+
+    use_mask: bool
+        If True, there are no spins outside the central circle
+
+    use_micro: bool
+        If True, a microcanonical computation is performed for short chains,
+        or chains with few non-blocked spins. If False, only canonical
+        computations are performed.
+
+    Returns
+    -------
+
+    h_m_to_px, h_px_to_m, h_sum
+
+    h_m_to_px and h_px_to_m are the new iterates
+
+    h_sum is the sum over all directions of h_m_to_px, from which the marginal
+    of a spin to be +1 or -1 can be computed.
+    """
+
     ndir = len(h_m_to_px)
     l_x = np.sqrt(h_m_to_px.shape[1])
     # First we update h_m_to_px, by solving the Ising chain
@@ -143,7 +399,7 @@ def BP_step_update_direction(h_m_to_px, h_px_to_m, y, proj_operator,
     if use_mask:
         X, Y = np.ogrid[:l_x, :l_x]
         mask = ((X - l_x/2)**2 + (Y - l_x/2)**2 <= (l_x/2)**2).ravel()
-    order = _order_dir(ndir) 
+    order = _order_dir(ndir)
     for direction in order:
         h_dir_tmp = np.zeros_like(h_px_to_m[direction])
         for pixel_ind in range(int(l_x)):
@@ -159,13 +415,14 @@ def BP_step_update_direction(h_m_to_px, h_px_to_m, y, proj_operator,
             Js = _calc_Jeff(inds, l_x, J)
             h_dir_tmp[inds] = solve_line(h_px_to_m[direction][inds], Js,
                         proj_value, use_micro=use_micro)
-        damping = 0.1
-        h_dir_tmp = (1 - damping) * h_dir_tmp + damping * h_tmp[direction]
+        damping = 0.75
+        h_old = np.copy(h_m_to_px[direction])
+        h_dir_tmp = (1 - damping) * h_dir_tmp + damping * h_old
         h_m_to_px[direction] = h_dir_tmp[:]
-        delta_h = h_dir_tmp - h_tmp[direction]
+        delta_h = h_dir_tmp - h_old
         h_px_to_m = _calc_hatf_partial_dir(h_px_to_m, delta_h, direction)
-    # Then we update h_px_to_m
     h_sum = h_m_to_px.sum(axis=0)
     h_sum[~mask] = 0
     return h_m_to_px, h_px_to_m, h_sum
+
 

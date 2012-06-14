@@ -2,7 +2,7 @@ from ..solve_ising import solve_microcanonical_h, \
                           gaussian_weight
 from .._ising import solve_microcanonical_chain
 from ..bp_reconstruction import BP_step, BP_step_update_direction, \
-                BP_step_always_update, _initialize_field, _calc_hatf
+        BP_step_parallel, BP_step_always_update, _initialize_field, _calc_hatf
 from ..build_projection_operator import build_projection_operator
 from ..util import generate_synthetic_data
 import numpy as np
@@ -130,8 +130,16 @@ def test_full_reco_can():
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
     for i in range(6):
         print "iter %d" %i
-        h_m_to_px, h_px_to_m, h_sum = BP_step(h_m_to_px, h_px_to_m, y, op, 
-                                            damping=0.9)
+        h_m_to_px, h_px_to_m, h_sum = BP_step(h_m_to_px, h_px_to_m, y, op)
+        sums.append(h_sum)
+    err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
+    assert err[-1] == 0
+    # Use the Parallel algorithm
+    h_m_to_px = _initialize_field(y, op)
+    h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
+    for i in range(6):
+        print "iter %d" %i
+        h_m_to_px, h_px_to_m, h_sum = BP_step_parallel(h_m_to_px, h_px_to_m, y, op)
         sums.append(h_sum)
     err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
     assert err[-1] == 0
