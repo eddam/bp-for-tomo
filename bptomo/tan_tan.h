@@ -21,3 +21,10 @@ double atanh_th_th(double x,double y){  /* returns  argth(th(x)*th(y)) */
   return ((double)isigne)*res;
 }
 
+double deriv_atanh_th_th(double x, double y, double z){
+    double thx, thy, thxy;
+    thx = tanh(x);
+    thy = tanh(y);
+    thxy = thx * thy;
+    return (thx * (1 - thy*thy) / (1 - thxy * thxy)) * (1 + z);
+}
