@@ -134,14 +134,14 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
     """
     if hext_init is None:
         hext_init = np.sign(y)
-    epsilon= .02
-    N = len(h) 
+    epsilon= .05
+    N = len(h)
     y = min(y, N)
     y = max(y, -N)
     hext = hext_init
     mag_tot, deriv_mag_tot, hloc = mag_chain_deriv(h, J, hext)
     iter_nb = 1
-    dmax = 0.
+    dmax = 1.5
     if np.abs(mag_tot - y) > dmax or deriv_mag_tot < 1.e-5:
         if mag_tot < y:
             hmin = 0
@@ -158,7 +158,6 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
                 hext *= 2
             hmin = hext
         mag_tot = 2 * N
-        iter_nb = 0
         # dichotomy
         while abs(mag_tot - y) > dmax and iter_nb < 200:
             iter_nb += 1
@@ -168,9 +167,11 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
                 hmin = hext
             else:
                 hmax = hext
+    iter_first = iter_nb
+    hext_first = hext
+    mag_tot_first = mag_tot
+    iter_nb = 1
     while abs(mag_tot - y) > epsilon and iter_nb < 30:
-        if iter_nb == 1:
-            hext -= (mag_tot - y) / deriv_mag_tot
         mag_tot, deriv_mag_tot, hloc = mag_chain_deriv(h, J, hext)
         hext -= (mag_tot - y) / deriv_mag_tot
         iter_nb += 1
@@ -201,6 +202,9 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
                 hmax = hext
     if iter_nb > 200:
         print "failed"
+    #print iter_nb
+    if np.isnan(hext):
+        raise ValueError
     return hloc, hext
 
 
@@ -310,8 +314,8 @@ def solve_line(field, Js, y, onsager=1, big_field=400, use_micro=False,
     if np.all(mask_blocked) and np.abs(np.sign(field).sum() - y) < 0.1:
         return (1.5 - onsager) * field, hext
     elif use_micro is False or np.sum(~mask_blocked) > 25:
-        hloc, hext = solve_canonical_h(field, Js, y, hext)
-        #hloc = solve_canonical_h_newton(field, Js, y)
+        #hloc, hext = solve_canonical_h(field, Js, y, hext)
+        hloc, hext = solve_canonical_h_newton(field, Js, y, hext)
         mask_blocked = np.abs(hloc) > big_field
         hloc[mask_blocked] = big_field * np.sign(hloc[mask_blocked])
         hloc -= onsager * field
