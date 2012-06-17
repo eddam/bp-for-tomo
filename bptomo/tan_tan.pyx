@@ -88,7 +88,7 @@ def derivative_passing(h, J, hext):
     for i in range(1, N):
         htot_tmp = hext + u[i - 1] + h[i - 1] 
         u[i] = fast_atanh_th_th(J[i-1], htot_tmp)
-        du[i] = deriv(J[i - 1], htot_tmp, du[i - 1])
+        du[i] = deriv_atanh_th_th(J[i - 1], htot_tmp, du[i - 1])
     for i in range(N - 2, 0, -1):
         htot_tmp = hext + v[i + 1] + h[i + 1] 
         v[i] = fast_atanh_th_th(J[i], htot_tmp)

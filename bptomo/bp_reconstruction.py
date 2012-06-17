@@ -73,7 +73,7 @@ def _calc_hatf_partial_dir(h_px_to_m, delta_h, mu):
     return h_px_to_m
 
 def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
-                        use_mask=True, use_micro=False):
+                        use_mask=True, use_micro=False, hext=None):
     """
     One iteration of BP (belief propagation), with messages updated
     after all new messages have been computed. A strong damping is needed
@@ -122,6 +122,9 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     of a spin to be +1 or -1 can be computed.
     """
     ndir = len(h_m_to_px)
+    if hext is None:
+        hext = np.zeros_like(y)
+    hext_new = np.zeros_like(y)
     # Heuristic value that works well for the damping factor
     # The more projections, the more damping we need
     damping = 1 - 1.6/ndir
@@ -145,13 +148,13 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
         Js = _calc_Jeff(inds, l_x, J)
         mu = i / int(l_x) # angle number
         # Solve the chain
-        h_m_to_px[mu][inds] = solve_line(h_px_to_m[mu][inds], Js,
-                        proj_value, use_micro=use_micro)
+        h_m_to_px[mu][inds], hext_new[i] = solve_line(h_px_to_m[mu][inds], Js,
+                        proj_value, hext=hext[i], use_micro=use_micro)
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
     h_sum[~mask] = 0
-    return h_m_to_px, h_px_to_m, h_sum
+    return h_m_to_px, h_px_to_m, h_sum, hext_new
 
 
 def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
