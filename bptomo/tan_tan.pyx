@@ -77,14 +77,18 @@ def fast_mag_chain_derivative(np.ndarray[DTYPE_t, ndim=1] h not None, np.ndarray
     magtot = mag.sum()
     return magtot, N - (mag**2).sum(), hloc
 
-def derivative_passing(h, J, hext):
-    N = len(h)
-    u = np.zeros((N))
-    du = np.zeros((N))
-    v = np.zeros((N))
-    dv = np.zeros((N))
-    hloc = np.zeros((N))
-    mag = np.zeros((N))
+@cython.boundscheck(False)
+def derivative_passing(np.ndarray[DTYPE_t, ndim=1] h not None, np.ndarray[DTYPE_t, ndim=1] J not None, float hext):
+    cdef int N = len(h)
+    cdef np.ndarray[DTYPE_t, ndim=1] u = np.zeros((N))
+    cdef np.ndarray[DTYPE_t, ndim=1] du = np.zeros((N))
+    cdef np.ndarray[DTYPE_t, ndim=1] v = np.zeros((N))
+    cdef np.ndarray[DTYPE_t, ndim=1] dv = np.zeros((N))
+    cdef float magtot
+    cdef int i
+    cdef np.ndarray[DTYPE_t, ndim=1] hloc = np.zeros((N), dtype=DTYPE)
+    cdef np.ndarray[DTYPE_t, ndim=1] dhloc = np.zeros((N), dtype=DTYPE)
+    cdef np.ndarray[DTYPE_t, ndim=1] mag = np.zeros((N), dtype=DTYPE)
     for i in range(1, N):
         htot_tmp = hext + u[i - 1] + h[i - 1] 
         u[i] = fast_atanh_th_th(J[i-1], htot_tmp)

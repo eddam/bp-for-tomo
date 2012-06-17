@@ -52,7 +52,6 @@ def mag_chain_deriv(h, J, hext):
     return magtot, deriv, hloc
 
 
-#@profile
 def solve_canonical_h(h, J, y, hext=None):
     """
     Solve Ising chain in the canonical formulation.
@@ -99,7 +98,7 @@ def solve_canonical_h(h, J, y, hext=None):
             hext *= 2
         hmin = hext
     mag_tot = 2 * N
-    iter_nb = 0
+    iter_nb = 1
     # dichotomy
     while abs(mag_tot - y) > epsilon and iter_nb < 200:
         iter_nb += 1
@@ -141,23 +140,30 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
     hext = hext_init
     mag_tot, deriv_mag_tot, hloc = mag_chain_deriv(h, J, hext)
     iter_nb = 1
-    dmax = 1.5
+    dicho = False
+    dmax = 1.5 # heuristic, 1 or 1.5?
+    # First, use the dichotomy if we are too far from the expected result
     if np.abs(mag_tot - y) > dmax or deriv_mag_tot < 1.e-5:
+        dicho = True
+        # Search bounds for the dichotomy
         if mag_tot < y:
-            hmin = 0
-            hext = 8
-            while y - mag_chain(h, J, hext) > epsilon:
+            hmin = hext
+            hext = max(8, hext + 1)
+            mag_tot = mag_chain(h, J, hext)
+            while y - mag_tot > epsilon:
                 hmin = hext
                 hext *= 2
+                mag_tot = mag_chain(h, J, hext)
             hmax = hext
         else:
-            hmax = 0
-            hext = -8
-            while mag_chain(h, J, hext) - y > epsilon:
+            hmax = hext
+            hext = min(-8, hext - 1)
+            mag_tot = mag_chain(h, J, hext)
+            while mag_tot - y > epsilon:
                 hmax = hext
                 hext *= 2
+                mag_tot = mag_chain(h, J, hext)
             hmin = hext
-        mag_tot = 2 * N
         # dichotomy
         while abs(mag_tot - y) > dmax and iter_nb < 200:
             iter_nb += 1
@@ -167,44 +173,13 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
                 hmin = hext
             else:
                 hmax = hext
-    iter_first = iter_nb
-    hext_first = hext
-    mag_tot_first = mag_tot
-    iter_nb = 1
-    while abs(mag_tot - y) > epsilon and iter_nb < 30:
+    # Now that we are close enough, we use Newton's method
+    if dicho is False:
+        hext -= (mag_tot - y) / deriv_mag_tot
+    while abs(mag_tot - y) > epsilon and iter_nb < 40:
         mag_tot, deriv_mag_tot, hloc = mag_chain_deriv(h, J, hext)
         hext -= (mag_tot - y) / deriv_mag_tot
         iter_nb += 1
-    if iter_nb >= 30:
-        if hmin is None:
-            if mag_tot < y:
-                hmin = 0
-                hext = 8
-                while y - mag_chain(h, J, hext) > epsilon:
-                    hmin = hext
-                    hext *= 2
-                hmax = hext
-            else:
-                hmax = 0
-                hext = -8
-                while mag_chain(h, J, hext) - y > epsilon:
-                    hmax = hext
-                    hext *= 2
-                hmin = hext
-        # dichotomy
-        while abs(mag_tot - y) > epsilon and iter_nb < 200:
-            iter_nb += 1
-            hext = 0.5 * (hmin + hmax)
-            mag_tot, hloc = mag_chain(h, J, hext, full_output=True)
-            if mag_tot < y:
-                hmin = hext
-            else:
-                hmax = hext
-    if iter_nb > 200:
-        print "failed"
-    #print iter_nb
-    if np.isnan(hext):
-        raise ValueError
     return hloc, hext
 
 

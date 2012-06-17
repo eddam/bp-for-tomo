@@ -133,11 +133,8 @@ def test_full_reco_can():
         print "iter %d" %i
         h_m_to_px, h_px_to_m, h_sum, hext = \
                     BP_step(h_m_to_px, h_px_to_m, y, op, hext=hext)
-        print hext
-        print np.isnan(hext).sum(), np.isinf(hext).sum()
         sums.append(h_sum)
     err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
-    print err
     assert err[-1] == 0
     """
     # Use the Parallel algorithm
