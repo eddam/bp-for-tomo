@@ -129,44 +129,48 @@ def test_full_reco_can():
     h_m_to_px = _initialize_field(y, op)
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
     hext = np.zeros_like(y)
-    for i in range(7):
+    for i in range(6):
         print "iter %d" %i
         h_m_to_px, h_px_to_m, h_sum, hext = \
                     BP_step(h_m_to_px, h_px_to_m, y, op, hext=hext)
         sums.append(h_sum)
     err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
     assert err[-1] == 0
-    """
     # Use the Parallel algorithm
     sums = []
     h_m_to_px = _initialize_field(y, op)
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
-    for i in range(7):
+    hext = np.zeros_like(y)
+    for i in range(6):
         print "iter %d" %i
-        h_m_to_px, h_px_to_m, h_sum = BP_step_parallel(h_m_to_px, h_px_to_m, y, op)
+        h_m_to_px, h_px_to_m, h_sum, hext = \
+                    BP_step_parallel(h_m_to_px, h_px_to_m, y, op, hext=hext)
         sums.append(h_sum)
     err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
     print err
     assert err[-1] == 0
     # Update after every direction
-    sums = []
     h_m_to_px = _initialize_field(y, op)
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
-    for i in range(6):
+    hext = np.zeros_like(y)
+    for i in range(3):
         print "iter %d" %i
-        h_m_to_px, h_px_to_m, h_sum = BP_step_update_direction(h_m_to_px,
-                                h_px_to_m, y, op)
+        h_m_to_px, h_px_to_m, h_sum, hext = BP_step_update_direction(h_m_to_px,
+                                h_px_to_m, y, op, hext=hext)
         sums.append(h_sum)
     err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
     assert err[-1] == 0
+    print err
     # Update after every ray
     h_m_to_px = _initialize_field(y, op)
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
-    for i in range(6):
+    hext = np.zeros_like(y)
+    sums = []
+    for i in range(3):
         print "iter %d" %i
-        h_m_to_px, h_px_to_m, h_sum = BP_step_always_update(h_m_to_px,
-                                h_px_to_m, y, op)
+        h_m_to_px, h_px_to_m, h_sum, hext = BP_step_always_update(h_m_to_px,
+                                h_px_to_m, y, op, hext=hext)
         sums.append(h_sum)
     err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
     assert err[-1] == 0
-    """
+    print err

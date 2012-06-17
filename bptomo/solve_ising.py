@@ -141,9 +141,9 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
     mag_tot, deriv_mag_tot, hloc = mag_chain_deriv(h, J, hext)
     iter_nb = 1
     dicho = False
-    dmax = 1.5 # heuristic, 1 or 1.5?
+    dmax = 1 # heuristic, 1 or 1.5?
     # First, use the dichotomy if we are too far from the expected result
-    if np.abs(mag_tot - y) > dmax or deriv_mag_tot < 1.e-5:
+    if np.abs(mag_tot - y) > dmax or deriv_mag_tot < 1.e-5 or abs(hext) > 6.5:
         dicho = True
         # Search bounds for the dichotomy
         if mag_tot < y:
@@ -165,7 +165,7 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
                 mag_tot = mag_chain(h, J, hext)
             hmin = hext
         # dichotomy
-        while abs(mag_tot - y) > dmax and iter_nb < 200:
+        while abs(mag_tot -y) > epsilon and (abs(mag_tot - y) > dmax or np.abs(hext) > 6.5) and iter_nb < 200:
             iter_nb += 1
             hext = 0.5 * (hmin + hmax)
             mag_tot, hloc = mag_chain(h, J, hext, full_output=True)
@@ -173,11 +173,17 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
                 hmin = hext
             else:
                 hmax = hext
+    iter_first = iter_nb
+    if iter_first > 20:
+        print "iter too much"
+    iter_nb = 0
     # Now that we are close enough, we use Newton's method
-    if dicho is False:
+    if dicho is False and deriv_mag_tot > 0:
         hext -= (mag_tot - y) / deriv_mag_tot
     while abs(mag_tot - y) > epsilon and iter_nb < 40:
         mag_tot, deriv_mag_tot, hloc = mag_chain_deriv(h, J, hext)
+        if deriv_mag_tot == 0:
+            raise ValueError
         hext -= (mag_tot - y) / deriv_mag_tot
         iter_nb += 1
     return hloc, hext
@@ -289,8 +295,8 @@ def solve_line(field, Js, y, onsager=1, big_field=400, use_micro=False,
     if np.all(mask_blocked) and np.abs(np.sign(field).sum() - y) < 0.1:
         return (1.5 - onsager) * field, hext
     elif use_micro is False or np.sum(~mask_blocked) > 25:
-        #hloc, hext = solve_canonical_h(field, Js, y, hext)
-        hloc, hext = solve_canonical_h_newton(field, Js, y, hext)
+        hloc, hext = solve_canonical_h(field, Js, y, hext)
+        #hloc, hext = solve_canonical_h_newton(field, Js, y, hext)
         mask_blocked = np.abs(hloc) > big_field
         hloc[mask_blocked] = big_field * np.sign(hloc[mask_blocked])
         hloc -= onsager * field

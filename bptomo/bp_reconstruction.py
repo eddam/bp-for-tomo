@@ -158,7 +158,7 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
 
 
 def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
-                        use_mask=True, use_micro=False):
+                        use_mask=True, use_micro=False, hext=None):
     """
     One iteration of BP (belief propagation), with messages updated
     after all new messages have been computed. A strong damping is needed
@@ -190,7 +190,7 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
         Amplitude of the coupling between spins
 
     use_mask: bool
-        If True, there are no spins outside the central circle
+         If True, there are no spins outside the central circle
 
     use_micro: bool
         If True, a microcanonical computation is performed for short chains,
@@ -208,8 +208,12 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     of a spin to be +1 or -1 can be computed.
     """
     if not joblib_import:
-        print "joblib could not be imported!"
+        raise ImportError("""joblib could not be imported, use the
+        function BP_step instead""")
     ndir = len(h_m_to_px)
+    if hext is None:
+        hext = np.zeros_like(y)
+    hext_new = np.zeros_like(y)
     # Heuristic value that works well for the damping factor
     # The more projections, the more damping we need
     damping = 1 - 1.6/ndir
@@ -239,17 +243,18 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
         J_all.append(Js)
         mu = i / int(l_x) # angle number
     # Solve the chain
-    res = Parallel(n_jobs=-1, verbose=0)(delayed(solve_line)(h_px_to_m[i/int(l_x)][inds], Js, proj_value, use_micro=use_micro) for i, (inds, Js, proj_value) in enumerate(zip(inds_all, J_all, y)))
+    res = Parallel(n_jobs=-1, verbose=0)(delayed(solve_line)(h_px_to_m[i/int(l_x)][inds], Js, proj_value, use_micro=use_micro, hext=hext_val) for i, (inds, Js, proj_value, hext_val) in enumerate(zip(inds_all, J_all, y, hext)))
     for i, (inds, resi) in enumerate(zip(inds_all, res)):
-        h_m_to_px[i/int(l_x)][inds] = resi
+        h_m_to_px[i/int(l_x)][inds] = resi[0]
+        hext_new[i] = resi[1]
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
     h_sum[~mask] = 0
-    return h_m_to_px, h_px_to_m, h_sum
+    return h_m_to_px, h_px_to_m, h_sum, hext_new
 
 def BP_step_always_update(h_m_to_px, h_px_to_m, y, proj_operator,
-                    J=.1, use_mask=True, use_micro=False):
+                    J=.1, use_mask=True, use_micro=False, hext=None):
     """
     One iteration of BP (belief propagation), with messages updated
     after each resolution of an Ising chain.
@@ -301,6 +306,9 @@ def BP_step_always_update(h_m_to_px, h_px_to_m, y, proj_operator,
     """
 
     ndir = len(h_m_to_px)
+    if hext is None:
+        hext = np.zeros_like(y)
+    hext_new = np.zeros_like(y)
     l_x = np.sqrt(h_m_to_px.shape[1]) 
     h_tmp = np.copy(h_m_to_px)
     if use_mask:
@@ -318,8 +326,9 @@ def BP_step_always_update(h_m_to_px, h_px_to_m, y, proj_operator,
             continue
         Js = _calc_Jeff(inds, l_x, J)
         mu = measure_index / int(l_x)
-        h_m_to_px_line = solve_line(h_px_to_m[mu][inds], Js,
-                        proj_value, use_micro=use_micro)
+        h_m_to_px_line, hext_new[measure_index] = \
+                solve_line(h_px_to_m[mu][inds], Js,
+                    proj_value, use_micro=use_micro, hext=hext[measure_index])
         damping = 0.5
         h_m_to_px_line = (1 - damping) * h_m_to_px_line \
                             + damping * h_tmp[mu][inds]
@@ -329,7 +338,7 @@ def BP_step_always_update(h_m_to_px, h_px_to_m, y, proj_operator,
     # Then we update h_px_to_m
     h_sum = h_m_to_px.sum(axis=0)
     h_sum[~mask] = 0
-    return h_m_to_px, h_px_to_m, h_sum
+    return h_m_to_px, h_px_to_m, h_sum, hext_new
 
 def _order_dir(ndir, batch_nb=8):
     """
@@ -343,7 +352,7 @@ def _order_dir(ndir, batch_nb=8):
     return sum(alldirs, [])
 
 def BP_step_update_direction(h_m_to_px, h_px_to_m, y, proj_operator,
-                    J=.1, use_mask=True, use_micro=False):
+                    J=.1, use_mask=True, use_micro=False, hext=None):
     """
     One iteration of BP (belief propagation), with messages updated
     after all messages corresponding to one angle have been computed.
@@ -395,9 +404,10 @@ def BP_step_update_direction(h_m_to_px, h_px_to_m, y, proj_operator,
     """
 
     ndir = len(h_m_to_px)
+    if hext is None:
+        hext = np.zeros_like(y)
+    hext_new = np.zeros_like(y)
     l_x = np.sqrt(h_m_to_px.shape[1])
-    # First we update h_m_to_px, by solving the Ising chain
-    # the pixels are rotated so that the measure is horizontal
     h_tmp = np.copy(h_m_to_px)
     if use_mask:
         X, Y = np.ogrid[:l_x, :l_x]
@@ -416,8 +426,9 @@ def BP_step_update_direction(h_m_to_px, h_px_to_m, y, proj_operator,
             if len(inds) == 0:
                 continue
             Js = _calc_Jeff(inds, l_x, J)
-            h_dir_tmp[inds] = solve_line(h_px_to_m[direction][inds], Js,
-                        proj_value, use_micro=use_micro)
+            h_dir_tmp[inds], hext_new[measure_index] = \
+                solve_line(h_px_to_m[direction][inds], Js, 
+                    proj_value, use_micro=use_micro, hext=hext[measure_index])
         damping = 0.75
         h_old = np.copy(h_m_to_px[direction])
         h_dir_tmp = (1 - damping) * h_dir_tmp + damping * h_old
@@ -426,6 +437,6 @@ def BP_step_update_direction(h_m_to_px, h_px_to_m, y, proj_operator,
         h_px_to_m = _calc_hatf_partial_dir(h_px_to_m, delta_h, direction)
     h_sum = h_m_to_px.sum(axis=0)
     h_sum[~mask] = 0
-    return h_m_to_px, h_px_to_m, h_sum
+    return h_m_to_px, h_px_to_m, h_sum, hext_new
 
 
