@@ -47,7 +47,6 @@ def _calc_Jeff(inds, l_x, J):
     res = .5 * np.log1p(res) - .5 * np.log1p(-res)
     return res
 
-
 def _initialize_field(y, proj_operator, big_field=400):
     """
     Message passing from measurements to pixels, in the case where
@@ -108,9 +107,8 @@ def _calc_hatf(h_m_to_px):
         px_to_mu[:] = h_sum - mu_to_px
     return h_px_to_m, h_sum
 
-
 def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
-                        use_mask=True, use_micro=False, hext=None):
+                        use_mask=True, hext=None):
     """
     One iteration of BP (belief propagation), with messages updated
     after all new messages have been computed. A strong damping is needed
@@ -139,7 +137,7 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
 
     J: float, default 0.1
         Amplitude of the coupling between spins. The larger J, the higher the
-        coupling. 
+        coupling.
 
     use_mask: bool
         If True, there are no spins outside the central circle
@@ -193,7 +191,7 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
         mu = i / int(l_x) # angle number
         # Solve the chain
         h_m_to_px[mu][inds], hext_new[i] = solve_line(h_px_to_m[mu][inds], Js,
-                        proj_value, hext=hext[i], use_micro=use_micro)
+                        proj_value, hext=hext[i])
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
@@ -202,7 +200,7 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
 
 
 def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
-                        use_mask=True, use_micro=False, hext=None):
+                        use_mask=True, hext=None):
     """
     One iteration of BP (belief propagation), with messages updated
     after all new messages have been computed. A strong damping is needed
@@ -287,7 +285,7 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
         J_all.append(Js)
         mu = i / int(l_x) # angle number
     # Solve the chain
-    res = Parallel(n_jobs=-1, verbose=0)(delayed(solve_line)(h_px_to_m[i/int(l_x)][inds], Js, proj_value, use_micro=use_micro, hext=hext_val) for i, (inds, Js, proj_value, hext_val) in enumerate(zip(inds_all, J_all, y, hext)))
+    res = Parallel(n_jobs=-1, verbose=0)(delayed(solve_line)(h_px_to_m[i/int(l_x)][inds], Js, proj_value, hext=hext_val) for i, (inds, Js, proj_value, hext_val) in enumerate(zip(inds_all, J_all, y, hext)))
     for i, (inds, resi) in enumerate(zip(inds_all, res)):
         h_m_to_px[i/int(l_x)][inds] = resi[0]
         hext_new[i] = resi[1]

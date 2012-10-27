@@ -1,9 +1,4 @@
 import numpy as np
-from scipy import ndimage, stats
-import math
-from math import exp, log1p
-from scipy import stats
-from _ising import _build_logZp, log_exp_plus_exp, solve_microcanonical_chain_pyx, solve_microcanonical_chain
 from tan_tan import fast_mag_chain_nu, derivative_passing
 
 #-------------------------- Canonical formulation ----------------
@@ -50,7 +45,6 @@ def mag_chain_deriv(h, J, hext):
     """
     magtot, deriv, hloc = derivative_passing(h, J, hext)
     return magtot, deriv, hloc
-
 
 def solve_canonical_h(h, J, y, hext=None):
     """
@@ -114,6 +108,8 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
     """
     Solve Ising chain in the canonical formulation.
 
+    Use Newton's method when the initial guess is close enough.
+
     Parameters
     ----------
 
@@ -123,7 +119,11 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
     J: 1-d ndarray of floats
         coupling between spins
 
-    y: total magnetization
+    y: float
+        total magnetization
+
+    hext_init: float
+        initial guess
 
     Returns
     -------
@@ -195,74 +195,9 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
 min_inf = -10000
 max_inf = 500
 
-#----------------Microconical Ising chain -----------------------------
-
-
-
-def log_gaussian_weight(s, s0, beta=4.):
-    """
-    probability of s if the measure if s_0
-    With the hypothesis of Gaussian white noise, it is a Gaussian.
-
-    Parameters
-    ----------
-
-    s: float
-        sum of spins
-
-    s0: float
-        measure
-
-    beta: float
-        width of the Gaussian. The more noise on the projections, the
-        larger beta should be.
-    """
-    return np.maximum(-40, - beta * (s - s0)**2)
-
-
-def gaussian_weight(s, s0, beta=4.):
-    """
-    probability of s if the measure if s_0
-    With the hypothesis of Gaussian white noise, it is a Gaussian.
-
-    Parameters
-    ----------
-
-    s: float
-        sum of spins
-
-    s0: float
-        measure
-
-    beta: float
-        width of the Gaussian. The more noise on the projections, the
-        larger beta should be.
-    """
-    return np.exp(np.maximum(-40, - beta * (s - s0)**2))
-
-def solve_microcanonical_h(h, J, s0, error=1):
-    """
-    Compute local magnetization for microcanonical Ising chain
-    """
-    h = np.asarray(h).astype(np.float)
-    J = np.asarray(J).astype(np.float)
-    s0 = float(s0)
-    try:
-        proba = solve_microcanonical_chain(h, J, s0)
-    except FloatingPointError:
-        print 'other'
-        proba = solve_microcanonical_chain_pyx(h, J, s0)
-    res = 0.5 * (proba[1] - proba[0])
-    big_field = 10
-    res[res > big_field] = big_field
-    res[res < -big_field] = -big_field
-    return res
-
-
 # ------------------ Solving Ising model for one projection -----------
 
-def solve_line(field, Js, y, onsager=1, big_field=400, use_micro=False,
-                                hext=None):
+def solve_line(field, Js, y, big_field=400, hext=None):
     """
     Solve Ising chain
 
@@ -278,11 +213,7 @@ def solve_line(field, Js, y, onsager=1, big_field=400, use_micro=False,
     y: float
         Sum of the spins (value of the projection)
 
-    onsager: float
-
     big_field: float
-
-    use_micro: bool, default False
 
     Returns
     -------
@@ -290,22 +221,17 @@ def solve_line(field, Js, y, onsager=1, big_field=400, use_micro=False,
     hloc: 1-d ndarray, same shape as field
         local magnetization
     """
+    # Handle large fields
     mask_blocked = np.abs(field) > big_field
     field[mask_blocked] = big_field * np.sign(field[mask_blocked])
     if np.all(mask_blocked) and np.abs(np.sign(field).sum() - y) < 0.1:
-        return (1.5 - onsager) * field, hext
-    elif use_micro is False or np.sum(~mask_blocked) > 25:
-        hloc, hext = solve_canonical_h(field, Js, y, hext)
-        #hloc, hext = solve_canonical_h_newton(field, Js, y, hext)
-        mask_blocked = np.abs(hloc) > big_field
-        hloc[mask_blocked] = big_field * np.sign(hloc[mask_blocked])
-        hloc -= onsager * field
-        return hloc, hext
-    else:
-        hloc = solve_microcanonical_h(field, Js, y)
-        mask_blocked = np.abs(hloc) > big_field
-        hloc[mask_blocked] = big_field * np.sign(hloc[mask_blocked])
-        hloc -= onsager * field
-        return hloc, hext
+        return 0.5 * field, hext
+    # Solve Ising chain
+    hloc, hext = solve_canonical_h(field, Js, y, hext)
+    mask_blocked = np.abs(hloc) > big_field
+    hloc[mask_blocked] = big_field * np.sign(hloc[mask_blocked])
+    # Remove initial field
+    hloc -= field
+    return hloc, hext
 
 

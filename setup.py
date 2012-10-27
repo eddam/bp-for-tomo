@@ -9,6 +9,5 @@ setup(
     name='bptomo',
     packages=['bptomo'],
     cmdclass = {'build_ext': build_ext},
-    ext_modules = [Extension("bptomo._ising", ["bptomo/_ising.pyx"]),
-                    Extension("bptomo.tan_tan", ["bptomo/tan_tan.pyx"])]
+    ext_modules = [Extension("bptomo.tan_tan", ["bptomo/tan_tan.pyx"])]
     )
