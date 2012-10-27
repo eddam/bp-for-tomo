@@ -1,10 +1,10 @@
 import numpy as np
 from scipy import sparse
-from bptomo.bp_reconstruction import BP_step, _initialize_field, _calc_hatf, \
-                            BP_step_update_direction
+from bptomo.bp_reconstruction import BP_step, _initialize_field, _calc_hatf
 from bptomo.build_projection_operator import build_projection_operator
 from bptomo.util import generate_synthetic_data
 import matplotlib.pyplot as plt
+from time import time
 
 # Generate synthetic data
 L = 256
@@ -17,13 +17,13 @@ mask = ((X - L/2)**2 + (Y - L/2)**2 <= (L/2)**2)
 im[~mask] = 0
 
 
-# Build projection data
+# Build projection data with noise
 n_dir = L / 5
 op = build_projection_operator(L, n_dir)
 y = (op * im.ravel()[:, np.newaxis]).ravel()
 # Add some noise
 np.random.seed(0)
-y += 4*np.random.randn(*y.shape)
+y += 1*np.random.randn(*y.shape)
 op = sparse.lil_matrix(op)
 
 # Prepare fields
@@ -37,23 +37,26 @@ px_to_m, m_to_px = [], []
 
 err_measure = []
 
-for i in range(20):
+n_iter = 14
+
+t0 = time()
+
+for i in range(n_iter):
     print "iter %d" %i
-    h_m_to_px, h_px_to_m, h_sum, h_ext = BP_step_update_direction(h_m_to_px,
-                                    h_px_to_m, y, op, J=0.1, hext=h_ext)
+    h_m_to_px, h_px_to_m, h_sum, h_ext = BP_step(h_m_to_px,
+                                    h_px_to_m, y, op, hext=h_ext)
     sums.append(h_sum)
     m_to_px.append(h_m_to_px)
     px_to_m.append(h_px_to_m)
     segmentation = np.sign(h_sum.reshape(L, L))
     segmentation[~mask] = 0
-    #y_segmentation = (op * segmentation.ravel()[:, np.newaxis]).ravel()
-    #err_measure.append(((y - y_segmentation)**2).sum())
+
+t1 = time()
+print t1 - t0
 
 err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
 print("number of errors vs. iteration: ")
 print(err)
-
-flip = [np.abs(np.sign(sums[i]) - np.sign(sums[i+1])).sum() for i in range(21)]
 
 plt.figure(figsize=(12, 4))
 plt.subplot(131)
