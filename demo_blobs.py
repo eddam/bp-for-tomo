@@ -1,3 +1,19 @@
+"""
+This example shows the reconstruction of a binary image from a reduced set
+of tomographic projections.
+
+Synthetic binary data of size 128x128 are generated, and 30 projections
+along regularly-spaced angles are computed.
+
+We first compute the initial guess for the field h_m_to_px (message passing
+from measures to pixels), then we perform belief-propagation iterations. The
+segmentation error with respect to ground truth decreases very fast
+(exponentially) with BP iterations, until an exact reconstruction is reached
+in this example.
+"""
+
+print(__doc__)
+
 import numpy as np
 from scipy import sparse
 from bptomo.bp_reconstruction import BP_step, _initialize_field, _calc_hatf
@@ -6,24 +22,27 @@ from bptomo.util import generate_synthetic_data
 import matplotlib.pyplot as plt
 from time import time
 
-# Generate synthetic data
-L = 256
+# Generate synthetic binary data (pixels values in {-1, 1})
+L = 128
 im = generate_synthetic_data(L, n_pts=100)
 im -= 0.5
 im *= 2
 
 X, Y = np.ogrid[:L, :L]
 mask = ((X - L/2)**2 + (Y - L/2)**2 <= (L/2)**2)
-im[~mask] = 0
+im[~mask] = 0  # we only consider pixels inside a central circle
 
 
 # Build projection data with noise
-n_dir = L / 5
+n_dir = 30
 op = build_projection_operator(L, n_dir)
+
 y = (op * im.ravel()[:, np.newaxis]).ravel()
 # Add some noise
 np.random.seed(0)
 y += 1*np.random.randn(*y.shape)
+
+# lil sparse format is needed to retrieve indices efficiently
 op = sparse.lil_matrix(op)
 
 # Prepare fields
@@ -35,25 +54,22 @@ h_ext = np.zeros_like(y) # external field
 
 px_to_m, m_to_px = [], []
 
-err_measure = []
-
-n_iter = 14
+n_iter = 17
 
 t0 = time()
 
 for i in range(n_iter):
-    print "iter %d" %i
+    print "iteration %d / %d" %(i + 1, n_iter)
     h_m_to_px, h_px_to_m, h_sum, h_ext = BP_step(h_m_to_px,
                                     h_px_to_m, y, op, hext=h_ext)
     sums.append(h_sum)
     m_to_px.append(h_m_to_px)
     px_to_m.append(h_px_to_m)
-    segmentation = np.sign(h_sum.reshape(L, L))
-    segmentation[~mask] = 0
 
 t1 = time()
-print t1 - t0
+print "reconstruction done in %f s" %(t1 - t0)
 
+# Compute segmentation error from ground truth
 err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
 print("number of errors vs. iteration: ")
 print(err)
@@ -64,12 +80,12 @@ plt.imshow(im, cmap='gray')
 plt.axis('off')
 plt.title('original image')
 plt.subplot(132)
-plt.imshow(sums[-1].reshape(-L, L), vmin=-10, vmax=10)
+plt.imshow(sums[-1].reshape(-L, L), vmin=-10, vmax=10,
+                    interpolation='nearest')
 plt.axis('off')
 plt.title('local magnetization')
 plt.subplot(133)
 plt.semilogy(err, 'o', ms=8)
-#plt.semilogy(err_measure, 'o', ms=8)
 plt.xlabel('$n$', fontsize=18)
 plt.title('# of errors')
 
