@@ -13,6 +13,7 @@ https://github.com/eddam/bp-for-tomo/zipball/demo
 
 If you wish to download the whole versioned project, you can clone it
 with git (http://git-scm.com/):
+
 $ git clone https://github.com/eddam/bp-for-tomo.git
 
 Dependencies
