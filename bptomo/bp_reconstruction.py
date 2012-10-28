@@ -1,3 +1,6 @@
+"""
+Belief propagation iterations for binary tomography reconstruction
+"""
 import numpy as np
 from solve_ising import solve_line
 try:
@@ -21,6 +24,7 @@ def _reorder(inds, l_x):
     ind_x, ind_y = inds / l_x, inds % l_x
     ind_y = l_x - ind_y
     return inds[np.argsort(ind_x * l_x + ind_y)]
+
 
 def _calc_Jeff(inds, l_x, J):
     """
@@ -46,6 +50,7 @@ def _calc_Jeff(inds, l_x, J):
     res = np.tanh(J) ** dist
     res = .5 * np.log1p(res) - .5 * np.log1p(-res)
     return res
+
 
 def _initialize_field(y, proj_operator, big_field=400):
     """
@@ -78,7 +83,7 @@ def _initialize_field(y, proj_operator, big_field=400):
     h_m_to_px
     """
     l_x = np.sqrt(proj_operator.shape[1])
-    h_m_to_px = np.zeros((len(y)/l_x, l_x**2))
+    h_m_to_px = np.zeros((len(y) / l_x, l_x ** 2))
     for i, proj_value in enumerate(y):
         inds = proj_operator.rows[i]
         mu = i / int(l_x)
@@ -88,9 +93,10 @@ def _initialize_field(y, proj_operator, big_field=400):
         else:
             h_m_to_px[mu][inds] = 0.5 * (np.log1p(ratio) - \
                                np.log1p(-ratio))
-    mask = np.abs(h_m_to_px) > big_field/2.
+    mask = np.abs(h_m_to_px) > big_field / 2.
     h_m_to_px[mask] = np.sign(h_m_to_px[mask]) * big_field / 2.
     return h_m_to_px
+
 
 def _calc_hatf(h_m_to_px):
     """
@@ -106,6 +112,7 @@ def _calc_hatf(h_m_to_px):
     for mu_to_px, px_to_mu in zip(h_m_to_px, h_px_to_m):
         px_to_mu[:] = h_sum - mu_to_px
     return h_px_to_m, h_sum
+
 
 def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
                         use_mask=True, hext=None):
@@ -142,11 +149,6 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     use_mask: bool
         If True, there are no spins outside the central circle
 
-    use_micro: bool
-        If True, a microcanonical computation is performed for short chains,
-        or chains with few non-blocked spins. If False, only canonical
-        computations are performed.
-
     hext: ndarray of same shape as y, default None
         Guesses for the values of the external field to be used in the Ising
         chains.
@@ -169,17 +171,18 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     hext_new = np.zeros_like(y)
     # Heuristic value that works well for the damping factor
     # The more projections, the more damping we need
-    damping = 1 - 1.6/ndir
+    damping = 1 - 1.6 / ndir
     l_x = np.sqrt(h_m_to_px.shape[1])
     h_tmp = np.copy(h_m_to_px)
     if use_mask:
         X, Y = np.ogrid[:l_x, :l_x]
-        mask = ((X - l_x/2)**2 + (Y - l_x/2)**2 <= (l_x/2)**2).ravel()
+        mask = ((X - l_x / 2) ** 2 + (Y - l_x / 2) ** 2 <= \
+                                    (l_x / 2) ** 2).ravel()
     for i, proj_value in enumerate(y):
         # Which pixels are in this measurement?
         inds = np.array(proj_operator.rows[i])
         # How are they ordered?
-        if i > len(y)/2:
+        if i > len(y) / 2:
             inds = _reorder(inds, l_x)
         # Handle pixels outside circle -- remove them
         mask_inds = mask[inds]
@@ -188,7 +191,7 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
             continue
         # effective couplings
         Js = _calc_Jeff(inds, l_x, J)
-        mu = i / int(l_x) # angle number
+        mu = i / int(l_x)  # angle number
         # Solve the chain
         h_m_to_px[mu][inds], hext_new[i] = solve_line(h_px_to_m[mu][inds], Js,
                         proj_value, hext=hext[i])
@@ -234,10 +237,10 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     use_mask: bool
          If True, there are no spins outside the central circle
 
-    use_micro: bool
-        If True, a microcanonical computation is performed for short chains,
-        or chains with few non-blocked spins. If False, only canonical
-        computations are performed.
+    hext: ndarray of same shape as y, default None
+        Guesses for the values of the external field to be used in the Ising
+        chains.
+
 
     Returns
     -------
@@ -248,6 +251,8 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
 
     h_sum is the sum over all directions of h_m_to_px, from which the marginal
     of a spin to be +1 or -1 can be computed.
+
+    h_ext is the new external field
     """
     if not joblib_import:
         raise ImportError("""joblib could not be imported, use the
@@ -258,12 +263,13 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     hext_new = np.zeros_like(y)
     # Heuristic value that works well for the damping factor
     # The more projections, the more damping we need
-    damping = 1 - 1.6/ndir
+    damping = 1 - 1.6 / ndir
     l_x = np.sqrt(h_m_to_px.shape[1])
     h_tmp = np.copy(h_m_to_px)
     if use_mask:
         X, Y = np.ogrid[:l_x, :l_x]
-        mask = ((X - l_x/2)**2 + (Y - l_x/2)**2 <= (l_x/2)**2).ravel()
+        mask = ((X - l_x / 2) ** 2 + (Y - l_x / 2) ** 2 <= \
+                        (l_x / 2) ** 2).ravel()
     inds_all = []
     J_all = []
     # We should not recompute this every time, but pass to the function
@@ -272,7 +278,7 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
         # Which pixels are in this measurement?
         inds = np.array(proj_operator.rows[i])
         # How are they ordered?
-        if i > len(y)/2:
+        if i > len(y) / 2:
             inds = _reorder(inds, l_x)
         # Handle pixels outside circle -- remove them
         mask_inds = mask[inds]
@@ -283,8 +289,8 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
         # effective couplings
         Js = _calc_Jeff(inds, l_x, J)
         J_all.append(Js)
-        mu = i / int(l_x) # angle number
-    # Solve the chain
+        mu = i / int(l_x)  # angle number
+    # Solve the chain in parallel for all measurements
     res = Parallel(n_jobs=-1, verbose=0)(delayed(solve_line)(h_px_to_m[i/int(l_x)][inds], Js, proj_value, hext=hext_val) for i, (inds, Js, proj_value, hext_val) in enumerate(zip(inds_all, J_all, y, hext)))
     for i, (inds, resi) in enumerate(zip(inds_all, res)):
         h_m_to_px[i/int(l_x)][inds] = resi[0]
@@ -294,5 +300,3 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
     h_sum[~mask] = 0
     return h_m_to_px, h_px_to_m, h_sum, hext_new
-
-

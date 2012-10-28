@@ -3,6 +3,7 @@ from tan_tan import fast_mag_chain_nu, derivative_passing
 
 #-------------------------- Canonical formulation ----------------
 
+
 def mag_chain(h, J, hext, full_output=False):
     """
     Compute the total magnetization for an Ising chain.
@@ -26,6 +27,7 @@ def mag_chain(h, J, hext, full_output=False):
     else:
         return magtot
 
+
 def mag_chain_deriv(h, J, hext):
     """
     Compute the total magnetization for an Ising chain.
@@ -45,6 +47,7 @@ def mag_chain_deriv(h, J, hext):
     """
     magtot, deriv, hloc = derivative_passing(h, J, hext)
     return magtot, deriv, hloc
+
 
 def solve_canonical_h(h, J, y, hext=None):
     """
@@ -67,7 +70,7 @@ def solve_canonical_h(h, J, y, hext=None):
     hloc: 1-d ndarray of floats
         local magnetization
     """
-    epsilon= .05
+    epsilon = .05
     if hext is None or np.isnan(hext):
         hext = 0
     hext = 0
@@ -104,6 +107,7 @@ def solve_canonical_h(h, J, y, hext=None):
             hmax = hext
     return hloc, hext
 
+
 def solve_canonical_h_newton(h, J, y, hext_init=None):
     """
     Solve Ising chain in the canonical formulation.
@@ -133,7 +137,7 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
     """
     if hext_init is None:
         hext_init = np.sign(y)
-    epsilon= .05
+    epsilon = .05
     N = len(h)
     y = min(y, N)
     y = max(y, -N)
@@ -141,7 +145,7 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
     mag_tot, deriv_mag_tot, hloc = mag_chain_deriv(h, J, hext)
     iter_nb = 1
     dicho = False
-    dmax = 1 # heuristic, 1 or 1.5?
+    dmax = 1  # heuristic, 1 or 1.5?
     # First, use the dichotomy if we are too far from the expected result
     if np.abs(mag_tot - y) > dmax or deriv_mag_tot < 1.e-5 or abs(hext) > 6.5:
         dicho = True
@@ -165,7 +169,9 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
                 mag_tot = mag_chain(h, J, hext)
             hmin = hext
         # dichotomy
-        while abs(mag_tot -y) > epsilon and (abs(mag_tot - y) > dmax or np.abs(hext) > 6.5) and iter_nb < 200:
+        while (abs(mag_tot - y) > epsilon and
+              (abs(mag_tot - y) > dmax or
+               np.abs(hext) > 6.5) and iter_nb < 200):
             iter_nb += 1
             hext = 0.5 * (hmin + hmax)
             mag_tot, hloc = mag_chain(h, J, hext, full_output=True)
@@ -189,13 +195,13 @@ def solve_canonical_h_newton(h, J, y, hext_init=None):
     return hloc, hext
 
 
-
 # ---------------------------------------------------------------
 
 min_inf = -10000
 max_inf = 500
 
 # ------------------ Solving Ising model for one projection -----------
+
 
 def solve_line(field, Js, y, big_field=400, hext=None):
     """
@@ -233,5 +239,3 @@ def solve_line(field, Js, y, big_field=400, hext=None):
     # Remove initial field
     hloc -= field
     return hloc, hext
-
-
