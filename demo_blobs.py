@@ -16,7 +16,7 @@ print(__doc__)
 
 import numpy as np
 from scipy import sparse
-from bptomo.bp_reconstruction import BP_step, _initialize_field, _calc_hatf
+from bptomo.bp_reconstruction import BP_step, _initialize_field, _calc_hatf_mf
 from bptomo.build_projection_operator import build_projection_operator
 from bptomo.util import generate_synthetic_data
 import matplotlib.pyplot as plt
@@ -49,22 +49,20 @@ op = sparse.lil_matrix(op)
 sums = [] # total magnetization
 
 h_m_to_px = _initialize_field(y, op) # measure to pixel
-h_px_to_m, first_sum = _calc_hatf(h_m_to_px) # pixel to measure
+h_sum = _calc_hatf_mf(h_m_to_px) # pixel to measure
 h_ext = np.zeros_like(y) # external field
 
 px_to_m, m_to_px = [], []
 
-n_iter = 17
+n_iter = 27
 
 t0 = time()
 
 for i in range(n_iter):
     print "iteration %d / %d" %(i + 1, n_iter)
-    h_m_to_px, h_px_to_m, h_sum, h_ext = BP_step(h_m_to_px,
-                                    h_px_to_m, y, op, hext=h_ext)
+    h_m_to_px, h_sum, h_ext = BP_step(h_m_to_px, h_sum, y, op, hext=h_ext)
     sums.append(h_sum)
     m_to_px.append(h_m_to_px)
-    px_to_m.append(h_px_to_m)
 
 t1 = time()
 print "reconstruction done in %f s" %(t1 - t0)
