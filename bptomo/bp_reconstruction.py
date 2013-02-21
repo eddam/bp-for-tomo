@@ -97,6 +97,20 @@ def _initialize_field(y, proj_operator, big_field=400):
     h_m_to_px[mask] = np.sign(h_m_to_px[mask]) * big_field / 2.
     return h_m_to_px
 
+def _calc_hatf_mf_correct(h_m_to_px):
+    """
+    Computation of the field from pixels to measures.
+
+    h_px_to_m[mu] = sum_nu h_m_to_px[nu]
+
+    where the sum over nu is over all measurements to which a pixel
+    contributes, except mu.
+    """
+    l = len(h_m_to_px)
+    h_sum = (1 - 1./l) * h_m_to_px.sum(axis=0)
+    return h_sum
+
+
 
 def _calc_hatf_mf(h_m_to_px):
     """
@@ -112,7 +126,7 @@ def _calc_hatf_mf(h_m_to_px):
 
 
 def BP_step(h_m_to_px, H_px, y, proj_operator, J=.1,
-                        use_mask=True, hext=None):
+                        use_mask=True, hext=None, mf_correct=True):
     """
     One iteration of BP (belief propagation), with messages updated
     after all new messages have been computed. A strong damping is needed
@@ -194,7 +208,10 @@ def BP_step(h_m_to_px, H_px, y, proj_operator, J=.1,
                         proj_value, hext=hext[i])
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
-    h_sum = _calc_hatf_mf(h_m_to_px)
+    if mf_correct:
+        h_sum = _calc_hatf_mf_correct(h_m_to_px)
+    else:
+        h_sum = _calc_hatf_mf(h_m_to_px)
     h_sum[~mask] = 0
     return h_m_to_px, h_sum, hext_new
 
