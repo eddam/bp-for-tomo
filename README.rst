@@ -47,9 +47,9 @@ $ python setup.py install
 (this will put the Python package somewhere in your PYTHONPATH, but you
 might need root access in Linux to do so)
 
-You can also specify the installation directory :
+You can also install locally, for your account only:
 
-$ python setup.py install --prefix=/path/to/my_dir
+$ python setup.py install --user
 
 
 Demo
