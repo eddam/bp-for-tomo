@@ -17,6 +17,11 @@ def configuration(parent_package='', top_path=None):
         include_dirs=[numpy.get_include()],
     )
 
+    config.add_extension(
+        'bptomo.solve',
+        sources=['bptomo/solve.c'],
+        include_dirs=[numpy.get_include()],
+    )
 
     return config
 

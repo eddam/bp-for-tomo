@@ -1,8 +1,9 @@
 import numpy as np
 from tan_tan import fast_mag_chain_nu, derivative_passing
+# from solve import solve_canonical_h as solve_canonical_h_cython
+from scipy import optimize
 
 #-------------------------- Canonical formulation ----------------
-
 
 def mag_chain(h, J, hext, full_output=False):
     """
@@ -27,6 +28,8 @@ def mag_chain(h, J, hext, full_output=False):
     else:
         return magtot
 
+def mag_chain_for_opt(hext, h, J, y, full_output):
+    return mag_chain(h, J, hext, full_output) - y
 
 def mag_chain_deriv(h, J, hext):
     """
@@ -47,7 +50,6 @@ def mag_chain_deriv(h, J, hext):
     """
     magtot, deriv, hloc = derivative_passing(h, J, hext)
     return magtot, deriv, hloc
-
 
 def solve_canonical_h(h, J, y, hext=None):
     """
@@ -105,6 +107,70 @@ def solve_canonical_h(h, J, y, hext=None):
             hmin = hext
         else:
             hmax = hext
+    return hloc, hext
+
+
+
+def solve_canonical_h_opt(h, J, y, hext=None):
+    """
+    Solve Ising chain in the canonical formulation.
+
+    Parameters
+    ----------
+
+    h: 1-d ndarray of floats
+        local field
+
+    y: total magnetization
+
+    J: 1-d ndarray of floats
+        coupling between spins
+
+    Returns
+    -------
+
+    hloc: 1-d ndarray of floats
+        local magnetization
+    """
+    epsilon = .1
+    N = float(len(h))
+    y = min(y, N)
+    y = max(y, -N)
+    hext = None
+    if hext is not None:
+        hext = optimize.newton(mag_chain_for_opt, hext,
+                    args=(h, J, y, False), tol=epsilon / N)
+        mag_tot, hloc = mag_chain(h, J, hext, full_output=True)
+    else:
+        """
+        hext = 0
+        mag_tot, hloc = mag_chain(h, J, hext, full_output=True)
+        if abs(mag_tot - y) < epsilon:
+            return hloc, hext
+        if mag_tot < y:
+            hmin = 0
+            hext = 8
+            while y - mag_chain(h, J, hext) > 0:
+                hmin = hext
+                hext *= 2
+            hmax = hext
+        else:
+            hmax = 0
+            hext = -8
+            while mag_chain(h, J, hext) - y > 0:
+                hmax = hext
+                hext *= 2
+            hmin = hext
+        """
+        try:
+            hext, res = optimize.brentq(mag_chain_for_opt, -6, 6,
+                        args=(h, J, y, False), xtol=epsilon / N, 
+                        full_output=True)
+            print res.iterations
+        except ValueError:
+            hext = optimize.brentq(mag_chain_for_opt, -20, 20,
+                        args=(h, J, y, False), xtol=epsilon / N)
+        mag_tot, hloc = mag_chain(h, J, hext, full_output=True)
     return hloc, hext
 
 
@@ -201,7 +267,6 @@ min_inf = -10000
 max_inf = 500
 
 # ------------------ Solving Ising model for one projection -----------
-
 
 def solve_line(field, Js, y, big_field=400, hext=None):
     """
