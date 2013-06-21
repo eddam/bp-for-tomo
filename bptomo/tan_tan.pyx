@@ -24,6 +24,51 @@ cdef deriv_fast_atanh_th_th(float x, float y, float z):
 cimport cython
 
 @cython.boundscheck(False)
+def mag_chain_uncoupled(np.ndarray[DTYPE_t, ndim=1] h not None,
+                float hext):
+    cdef float magtot=0
+    cdef int i
+    cdef unsigned int N = len(h)
+    for i in range(N):
+        magtot += tanh(h[i] + hext)
+    return magtot
+
+
+@cython.boundscheck(False)
+def mag_chain_uncoupled_derivative(float hext,
+        np.ndarray[DTYPE_t, ndim=1] h not None, float y):
+    cdef float acc = 0
+    cdef int i
+    cdef float val_tmp
+    cdef unsigned int N = len(h)
+    for i in range(N):
+        val_tmp = tanh(h[i] + hext)
+        acc += 1 - val_tmp ** 2
+    return acc
+
+
+@cython.boundscheck(False)
+def fast_mag_chain_uncoupled(np.ndarray[DTYPE_t, ndim=1] h not None,
+                float hext):
+    cdef float magtot=0
+    cdef int i
+    cdef float vmin, vmax
+    vmin = -5. - hext
+    vmax = 5. - hext
+    cdef float val_tmp
+    cdef unsigned int N = len(h)
+    for i in range(N):
+        val_tmp = h[i]
+        if h[i] < vmin:
+            magtot -= 1
+        if h[i] > vmax:
+            magtot += 1
+        else:
+            magtot += tanh(h[i] + hext)
+    return magtot
+
+
+@cython.boundscheck(False)
 def fast_mag_chain_nu(np.ndarray[DTYPE_t, ndim=1] h not None, np.ndarray[DTYPE_t, ndim=1] J not None, float hext):
     cdef unsigned int N = len(h)
     cdef np.ndarray[DTYPE_t, ndim=1] u = np.zeros(N, dtype=DTYPE)

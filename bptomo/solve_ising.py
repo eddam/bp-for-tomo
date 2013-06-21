@@ -1,9 +1,15 @@
 import numpy as np
-from tan_tan import fast_mag_chain_nu, derivative_passing
+from tan_tan import fast_mag_chain_nu, derivative_passing, \
+                    mag_chain_uncoupled, mag_chain_uncoupled_derivative, \
+                    fast_mag_chain_uncoupled
 # from solve import solve_canonical_h as solve_canonical_h_cython
 from scipy import optimize
+from math import atanh
 
 #-------------------------- Canonical formulation ----------------
+
+def mag_chain_uncoupled_error(hext, hi, y):
+    return mag_chain_uncoupled(hi, hext) - y
 
 def mag_chain(h, J, hext, full_output=False):
     """
@@ -267,7 +273,6 @@ min_inf = -10000
 max_inf = 500
 
 # ------------------ Solving Ising model for one projection -----------
-
 def solve_line(field, Js, y, big_field=400, hext=None):
     """
     Solve Ising chain
@@ -304,3 +309,66 @@ def solve_line(field, Js, y, big_field=400, hext=None):
     # Remove initial field
     hloc -= field
     return hloc, hext
+
+def solve_uncoupled_line(field, y, big_field=400, hext=None):
+    """
+    Solve Ising chain
+
+    Parameters
+    ----------
+
+    field: 1-d ndarray
+        Local field on the spins
+
+    Js: float
+        Coupling between spins
+
+    y: float
+        Sum of the spins (value of the projection)
+
+    big_field: float
+
+    Returns
+    -------
+
+    hloc: 1-d ndarray, same shape as field
+        local magnetization
+    """
+    if np.abs(y) >= len(field) - 0.5:
+        return np.sign(y) * 10
+    # Handle large fields
+    mask_blocked = np.abs(field) > big_field
+    field[mask_blocked] = big_field * np.sign(field[mask_blocked])
+    if np.all(mask_blocked) and np.abs(np.sign(field).sum() - y) < 0.1:
+        return 0
+    if hext is None:
+        hext = 0
+    # Solve Ising chain
+    hext = my_bisect(field, y, hext, tol=0.2)
+    return hext
+
+def my_bisect(field, y, hext, tol=0.1):
+    niter_max = 30
+    l = float(len(field))
+    err_init =  mag_chain_uncoupled_error(hext, field, y) 
+    dx = 10
+    if err_init < 0:
+        vmin = hext
+        vmax = - field.min() + atanh(y/l) + 0.1
+        dx = 0.5 * (vmax - vmin)
+    else:
+        vmin = - field.max() + atanh(y/l) - 0.1
+        vmax = hext
+        dx = 0.5 * (vmax - vmin)
+    i = 0
+    while i < niter_max:
+        xm = vmin + dx
+        err = mag_chain_uncoupled_error(xm, field, y)
+        if abs(err) < tol:
+            return xm
+        if err <= 0:
+            vmin = xm
+        dx *= 0.5
+        i += 1
+    if i == niter_max:
+        raise ValueError
