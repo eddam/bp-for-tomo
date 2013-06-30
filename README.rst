@@ -28,26 +28,32 @@ several Python modules
 
 * scipy
 
-* optional: matplotlib (to plot the demo results)
-
 * a C compiler 
+
+* optional: matplotlib (to plot the demo results) and scikit-image (for
+  utility functions to preprocess real data).
+
+All these packages are included in the usual Scientific Python
+distribution, such as Anaconda http://continuum.io/downloads or Enthought
+Python Distribution https://www.enthought.com/products/epd/. 
 
 Install
 -------
+
+Go to the bptomo directory
+
+$ cd bptomo
+
+And execute one of the following commands:
 
 If you wish to use the code inside the source directory:
 
 $ python setup.py build_ext --inplace
 
-Or if you wish to install the code as a package that you can import in
-all your python files:
+(this will build the compiled parts of the code, using cython).
 
-$ python setup.py install 
-
-(this will put the Python package somewhere in your PYTHONPATH, but you
-might need root access in Linux to do so)
-
-You can also install locally, for your account only:
+Or you can install the package in order to import it from anywhere in the
+system:
 
 $ python setup.py install --user
 
@@ -55,8 +61,8 @@ $ python setup.py install --user
 Demo
 ----
 
-run
+run the script
 
-$ python demo_blobs.py
+$ python demo_bp_flavors.py
 
 (or, better, run the script inside the Ipython interpreter)
