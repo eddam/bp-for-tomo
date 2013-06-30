@@ -2,7 +2,7 @@
 Belief propagation iterations for binary tomography reconstruction
 """
 import numpy as np
-from solve_ising import solve_line, solve_uncoupled_line
+from solve_lines import solve_line, solve_uncoupled_line
 try:
     from joblib import Parallel, delayed
     joblib_import = True
@@ -15,6 +15,8 @@ if not joblib_import:
     except ImportError:
         joblib_import = False
 
+
+# --------------- Utility routines --------------------------
 
 def _reorder(inds, l_x):
     """
@@ -52,7 +54,7 @@ def _calc_Jeff(inds, l_x, J):
     return res
 
 
-def _initialize_field(y, proj_operator, big_field=400):
+def _initialize_field(y, l_x, proj_operator, big_field=15):
     """
     Message passing from measurements to pixels, in the case where
     there is no spatial coupling between spins.
@@ -82,10 +84,13 @@ def _initialize_field(y, proj_operator, big_field=400):
     -------
     h_m_to_px
     """
-    l_x = np.sqrt(proj_operator.shape[1])
-    h_m_to_px = np.zeros((len(y) / l_x, l_x ** 2))
+    n_meas, n_pix = proj_operator.shape
+    n_dir = n_meas / l_x
+    h_m_to_px = np.zeros((n_dir, n_pix))
     for i, proj_value in enumerate(y):
         inds = proj_operator.rows[i]
+        if len(inds) == 0:
+            continue
         mu = i / int(l_x)
         ratio = proj_value / float(len(inds))
         if np.abs(ratio) >= 1:
@@ -128,7 +133,6 @@ def _calc_hatf_mf_correct(h_m_to_px):
     return h_sum
 
 
-
 def _calc_hatf_mf(h_m_to_px):
     """
     Computation of the field from pixels to measures.
@@ -141,178 +145,11 @@ def _calc_hatf_mf(h_m_to_px):
     h_sum = h_m_to_px.sum(axis=0)
     return h_sum
 
-def BP_step_truemf(H_px, y, proj_operator, ndir, J=.1,
-                        use_mask=True, hext=None):
-    """
-    One iteration of BP (belief propagation), with messages updated
-    after all new messages have been computed. A strong damping is needed
-    with this update method.
-
-    Parameters
-    ----------
-
-    H_px: ndarray of shape (l_x, l_x) where the original image
-        is (l_x, l_x)
-        local magnetic field, determined by the other measures. The frame
-        is the one of the non-rotated image (ie, Ising chains are taken at
-        an angle corresponding to the projection)
-
-    y: ndarray of shape ndir*L (1-D)
-        Array that contains all measures (sum of spins along rays)
-
-    proj_operator: sparse matrix, in lil format
-        The projection operator (with only 1s in non-zero entries)
-
-    J: float, default 0.1
-        Amplitude of the coupling between spins. The larger J, the higher the
-        coupling.
-
-    use_mask: bool
-        If True, there are no spins outside the central circle
-
-    hext: ndarray of same shape as y, default None
-        Guesses for the values of the external field to be used in the Ising
-        chains.
-
-    Returns
-    -------
-
-    h_m_to_px, h_px_to_m, h_sum, h_ext
-
-    h_m_to_px and h_px_to_m are the new iterates
-
-    h_sum is the sum over all directions of h_m_to_px, from which the marginal
-    of a spin to be +1 or -1 can be computed.
-
-    h_ext is the new external field
-    """
-    if hext is None:
-        hext = np.zeros_like(y)
-    hext_new = np.zeros_like(y)
-    # Heuristic value that works well for the damping factor
-    # The more projections, the more damping we need
-    damping = 1 - 1.6 / ndir
-    h_sum = np.zeros_like(H_px)
-    l_x = np.sqrt(len(H_px))
-    if use_mask:
-        X, Y = np.ogrid[:l_x, :l_x]
-        mask = ((X - l_x / 2) ** 2 + (Y - l_x / 2) ** 2 <= \
-                                    (l_x / 2) ** 2).ravel()
-    for i, proj_value in enumerate(y):
-        # Which pixels are in this measurement?
-        inds = np.array(proj_operator.rows[i])
-        # How are they ordered?
-        if i > len(y) / 2:
-            inds = _reorder(inds, l_x)
-        # Handle pixels outside circle -- remove them
-        mask_inds = mask[inds]
-        inds = inds[mask_inds]
-        if len(inds) == 0:
-            continue
-        # effective couplings
-        Js = _calc_Jeff(inds, l_x, J)
-        # Solve the chain
-        h_line, hext_new[i] = solve_line(H_px[inds], Js,
-                        proj_value, hext=hext[i])
-        h_sum[inds] += h_line
-    h_sum *= (1 - 1./l_x)
-    h_sum = (1 - damping) * h_sum + damping * H_px
-    h_sum[~mask] = 0
-    return h_sum, hext_new
-
-def BP_step_mf(h_m_to_px, H_px, y, proj_operator, J=.1,
-                        use_mask=True, hext=None, mf_correct=True):
-    """
-    One iteration of BP (belief propagation), with messages updated
-    after all new messages have been computed. A strong damping is needed
-    with this update method.
-
-    Parameters
-    ----------
-
-    h_m_to_px: ndarray of shape (ndir, l_x, l_x) where the original image
-        is (l_x, l_x)
-        local magnetizations (measure to field). The frame is the one of the
-        non-rotated image (ie, Ising chains are taken at an angle
-        corresponding to the projection)
-
-    H_px: ndarray of shape (l_x, l_x) where the original image
-        is (l_x, l_x)
-        local magnetic field, determined by the other measures. The frame
-        is the one of the non-rotated image (ie, Ising chains are taken at
-        an angle corresponding to the projection)
-
-    y: ndarray of shape ndir*L (1-D)
-        Array that contains all measures (sum of spins along rays)
-
-    proj_operator: sparse matrix, in lil format
-        The projection operator (with only 1s in non-zero entries)
-
-    J: float, default 0.1
-        Amplitude of the coupling between spins. The larger J, the higher the
-        coupling.
-
-    use_mask: bool
-        If True, there are no spins outside the central circle
-
-    hext: ndarray of same shape as y, default None
-        Guesses for the values of the external field to be used in the Ising
-        chains.
-
-    Returns
-    -------
-
-    h_m_to_px, h_px_to_m, h_sum, h_ext
-
-    h_m_to_px and h_px_to_m are the new iterates
-
-    h_sum is the sum over all directions of h_m_to_px, from which the marginal
-    of a spin to be +1 or -1 can be computed.
-
-    h_ext is the new external field
-    """
-    ndir = len(h_m_to_px)
-    if hext is None:
-        hext = np.array([None for i in range(len(y))])
-    hext_new = np.zeros_like(y)
-    # Heuristic value that works well for the damping factor
-    # The more projections, the more damping we need
-    damping = 1 - 1.6 / ndir
-    l_x = np.sqrt(h_m_to_px.shape[1])
-    h_tmp = np.copy(h_m_to_px)
-    if use_mask:
-        X, Y = np.ogrid[:l_x, :l_x]
-        mask = ((X - l_x / 2) ** 2 + (Y - l_x / 2) ** 2 <= \
-                                    (l_x / 2) ** 2).ravel()
-    for i, proj_value in enumerate(y):
-        # Which pixels are in this measurement?
-        inds = np.array(proj_operator.rows[i])
-        # How are they ordered?
-        if i > len(y) / 2:
-            inds = _reorder(inds, l_x)
-        # Handle pixels outside circle -- remove them
-        mask_inds = mask[inds]
-        inds = inds[mask_inds]
-        if len(inds) == 0:
-            continue
-        # effective couplings
-        Js = _calc_Jeff(inds, l_x, J)
-        mu = i / int(l_x)  # angle number
-        # Solve the chain
-        h_m_to_px[mu][inds], hext_new[i] = solve_line(H_px[inds], Js,
-                        proj_value, hext=hext[i])
-    h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
-    # Then we update h_px_to_m
-    if mf_correct:
-        h_sum = _calc_hatf_mf_correct(h_m_to_px)
-    else:
-        h_sum = _calc_hatf_mf(h_m_to_px)
-    h_sum[~mask] = 0
-    return h_m_to_px, h_sum, hext_new
+# ----------- Different flavors of BP iterations -------------------
 
 
-def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
-                        use_mask=True, hext=None):
+def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, l_x, J=.1,
+                        hext=None):
     """
     One iteration of BP (belief propagation), with messages updated
     after all new messages have been computed. A strong damping is needed
@@ -339,6 +176,9 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     proj_operator: sparse matrix, in lil format
         The projection operator (with only 1s in non-zero entries)
 
+    l_x : int
+        linear size of the image to reconstruct
+
     J: float, default 0.1
         Amplitude of the coupling between spins. The larger J, the higher the
         coupling.
@@ -369,23 +209,15 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     # Heuristic value that works well for the damping factor
     # The more projections, the more damping we need
     damping = 1 - 1.6 / ndir
-    l_x = np.sqrt(h_m_to_px.shape[1])
     h_tmp = np.copy(h_m_to_px)
-    if use_mask:
-        X, Y = np.ogrid[:l_x, :l_x]
-        mask = ((X - l_x / 2) ** 2 + (Y - l_x / 2) ** 2 <= \
-                                    (l_x / 2) ** 2).ravel()
     for i, proj_value in enumerate(y):
         # Which pixels are in this measurement?
         inds = np.array(proj_operator.rows[i])
+        if len(inds) == 0:
+            continue
         # How are they ordered?
         if i > len(y) / 2:
             inds = _reorder(inds, l_x)
-        # Handle pixels outside circle -- remove them
-        mask_inds = mask[inds]
-        inds = inds[mask_inds]
-        if len(inds) == 0:
-            continue
         # effective couplings
         Js = _calc_Jeff(inds, l_x, J)
         mu = i / int(l_x)  # angle number
@@ -395,15 +227,17 @@ def BP_step(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
-    h_sum[~mask] = 0
     return h_m_to_px, h_px_to_m, h_sum, hext_new
 
-def BP_step_asym(h_m_to_px, h_px_to_m, y, proj_operator, J=1,
-                        use_mask=True, hext=None):
+
+def BP_step_asym(h_m_to_px, h_px_to_m, y, proj_operator, l_x, J=1,
+                        hext=None):
     """
-    One iteration of BP (belief propagation), with messages updated
-    after all new messages have been computed. A strong damping is needed
-    with this update method.
+    One iteration of BP (belief propagation) with uncoupled spins on all
+    directions, but four equally-spaced directions.
+
+    Note that the value of J is different for the uncoupled version than
+    for the coupled version.
 
     Parameters
     ----------
@@ -425,6 +259,9 @@ def BP_step_asym(h_m_to_px, h_px_to_m, y, proj_operator, J=1,
 
     proj_operator: sparse matrix, in lil format
         The projection operator (with only 1s in non-zero entries)
+
+    l_x : int
+        linear size of the image to reconstruct
 
     J: float, default 0.1
         Amplitude of the coupling between spins. The larger J, the higher the
@@ -450,30 +287,23 @@ def BP_step_asym(h_m_to_px, h_px_to_m, y, proj_operator, J=1,
     h_ext is the new external field
     """
     ndir = len(h_m_to_px)
-    coupled_dirs = np.linspace(0, ndir, 4, endpoint=False).astype(np.uint)
+    coupled_dirs = np.linspace(0, ndir, 4, endpoint=False).astype(np.uint) 
     if hext is None:
         hext = np.zeros_like(y)
     hext_new = np.zeros_like(y)
     # Heuristic value that works well for the damping factor
     # The more projections, the more damping we need
     damping = 1 - 1.6 / ndir
-    l_x = np.sqrt(h_m_to_px.shape[1])
+    #l_x = np.sqrt(h_m_to_px.shape[1])
     h_tmp = np.copy(h_m_to_px)
-    if use_mask:
-        X, Y = np.ogrid[:l_x, :l_x]
-        mask = ((X - l_x / 2) ** 2 + (Y - l_x / 2) ** 2 <= \
-                                    (l_x / 2) ** 2).ravel()
     for i, proj_value in enumerate(y):
         # Which pixels are in this measurement?
         inds = np.array(proj_operator.rows[i])
         # How are they ordered?
-        if i > len(y) / 2:
-            inds = _reorder(inds, l_x)
-        # Handle pixels outside circle -- remove them
-        mask_inds = mask[inds]
-        inds = inds[mask_inds]
         if len(inds) == 0:
             continue
+        if i > len(y) / 2:
+            inds = _reorder(inds, l_x)
         mu = i / int(l_x)  # angle number
         if mu in coupled_dirs:
             # effective couplings
@@ -488,8 +318,96 @@ def BP_step_asym(h_m_to_px, h_px_to_m, y, proj_operator, J=1,
     h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
     # Then we update h_px_to_m
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
-    h_sum[~mask] = 0
     return h_m_to_px, h_px_to_m, h_sum, hext_new
+
+
+def BP_step_mf(h_m_to_px, H_px, y, proj_operator, l_x, J=.1,
+                        hext=None, mf_correct=True):
+    """
+    One iteration of BP (belief propagation), with mean field: pixels
+    send the same message to all factors they belong to. For a large
+    image size, the result is as good as without mean field/
+
+    Parameters
+    ----------
+
+    h_m_to_px: ndarray of shape (ndir, l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetizations (measure to field). The frame is the one of the
+        non-rotated image (ie, Ising chains are taken at an angle
+        corresponding to the projection)
+
+    H_px: ndarray of shape (l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetic field, determined by the other measures. The frame
+        is the one of the non-rotated image (ie, Ising chains are taken at
+        an angle corresponding to the projection)
+
+    y: ndarray of shape ndir*L (1-D)
+        Array that contains all measures (sum of spins along rays)
+
+    proj_operator: sparse matrix, in lil format
+        The projection operator (with only 1s in non-zero entries)
+
+    l_x : int
+        linear size of the image to reconstruct
+
+    J: float, default 0.1
+        Amplitude of the coupling between spins. The larger J, the higher the
+        coupling.
+
+    use_mask: bool
+        If True, there are no spins outside the central circle
+
+    hext: ndarray of same shape as y, default None
+        Guesses for the values of the external field to be used in the Ising
+        chains.
+
+    Returns
+    -------
+
+    h_m_to_px, h_sum, h_ext
+
+    h_m_to_px are the new iterates
+
+    h_sum is the sum over all directions of h_m_to_px, from which the marginal
+    of a spin to be +1 or -1 can be computed.
+
+    h_ext is the new external field
+    """
+    ndir = len(h_m_to_px)
+    if hext is None:
+        hext = np.array([None for i in range(len(y))])
+    hext_new = np.zeros_like(y)
+    # Heuristic value that works well for the damping factor
+    # The more projections, the more damping we need
+    damping = 1 - 1.6 / ndir
+    h_tmp = np.copy(h_m_to_px)
+    for i, proj_value in enumerate(y):
+        # Which pixels are in this measurement?
+        inds = np.array(proj_operator.rows[i])
+        if len(inds) == 0:
+            continue
+        # How are they ordered?
+        if i > len(y) / 2:
+            inds = _reorder(inds, l_x)
+        # effective couplings
+        Js = _calc_Jeff(inds, l_x, J)
+        mu = i / int(l_x)  # angle number
+        # Solve the chain
+        h_m_to_px[mu][inds], hext_new[i] = solve_line(H_px[inds], Js,
+                        proj_value, hext=hext[i])
+    h_m_to_px = (1 - damping) * h_m_to_px + damping * h_tmp
+    # Then we update h_px_to_m
+    if mf_correct:
+        h_sum = _calc_hatf_mf_correct(h_m_to_px)
+    else:
+        h_sum = _calc_hatf_mf(h_m_to_px)
+    return h_m_to_px, h_sum, hext_new
+
+
+
+#------- Not used for now (might be buggy) -------------------------
 
 
 def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
@@ -590,3 +508,85 @@ def BP_step_parallel(h_m_to_px, h_px_to_m, y, proj_operator, J=.1,
     h_px_to_m, h_sum = _calc_hatf(h_m_to_px)
     h_sum[~mask] = 0
     return h_m_to_px, h_px_to_m, h_sum, hext_new
+
+
+def BP_step_truemf(H_px, y, proj_operator, ndir, J=.1,
+                        use_mask=True, hext=None):
+    """
+    One iteration of BP (belief propagation), with messages updated
+    after all new messages have been computed. A strong damping is needed
+    with this update method.
+
+    Parameters
+    ----------
+
+    H_px: ndarray of shape (l_x, l_x) where the original image
+        is (l_x, l_x)
+        local magnetic field, determined by the other measures. The frame
+        is the one of the non-rotated image (ie, Ising chains are taken at
+        an angle corresponding to the projection)
+
+    y: ndarray of shape ndir*L (1-D)
+        Array that contains all measures (sum of spins along rays)
+
+    proj_operator: sparse matrix, in lil format
+        The projection operator (with only 1s in non-zero entries)
+
+    J: float, default 0.1
+        Amplitude of the coupling between spins. The larger J, the higher the
+        coupling.
+
+    use_mask: bool
+        If True, there are no spins outside the central circle
+
+    hext: ndarray of same shape as y, default None
+        Guesses for the values of the external field to be used in the Ising
+        chains.
+
+    Returns
+    -------
+
+    h_m_to_px, h_px_to_m, h_sum, h_ext
+
+    h_m_to_px and h_px_to_m are the new iterates
+
+    h_sum is the sum over all directions of h_m_to_px, from which the marginal
+    of a spin to be +1 or -1 can be computed.
+
+    h_ext is the new external field
+    """
+    if hext is None:
+        hext = np.zeros_like(y)
+    hext_new = np.zeros_like(y)
+    # Heuristic value that works well for the damping factor
+    # The more projections, the more damping we need
+    damping = 1 - 1.6 / ndir
+    h_sum = np.zeros_like(H_px)
+    l_x = np.sqrt(len(H_px))
+    if use_mask:
+        X, Y = np.ogrid[:l_x, :l_x]
+        mask = ((X - l_x / 2) ** 2 + (Y - l_x / 2) ** 2 <= \
+                                    (l_x / 2) ** 2).ravel()
+    for i, proj_value in enumerate(y):
+        # Which pixels are in this measurement?
+        inds = np.array(proj_operator.rows[i])
+        # How are they ordered?
+        if i > len(y) / 2:
+            inds = _reorder(inds, l_x)
+        # Handle pixels outside circle -- remove them
+        mask_inds = mask[inds]
+        inds = inds[mask_inds]
+        if len(inds) == 0:
+            continue
+        # effective couplings
+        Js = _calc_Jeff(inds, l_x, J)
+        # Solve the chain
+        h_line, hext_new[i] = solve_line(H_px[inds], Js,
+                        proj_value, hext=hext[i])
+        h_sum[inds] += h_line
+    h_sum *= (1 - 1./l_x)
+    h_sum = (1 - damping) * h_sum + damping * H_px
+    h_sum[~mask] = 0
+    return h_sum, hext_new
+
+

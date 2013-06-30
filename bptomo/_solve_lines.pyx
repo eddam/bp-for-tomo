@@ -24,6 +24,27 @@ cdef deriv_fast_atanh_th_th(float x, float y, float z):
 cimport cython
 
 @cython.boundscheck(False)
+def cython_mag_mag_error(float Mext, np.ndarray[DTYPE_t, ndim=1] mag not None,
+                float y):
+    cdef float magtot=0
+    cdef int i
+    cdef unsigned int N = len(mag)
+    for i in range(N):
+        magtot += (mag[i] + Mext) / (1. + mag[i] * Mext)
+    return y - magtot
+
+
+@cython.boundscheck(False)
+def cython_mag(np.ndarray[DTYPE_t, ndim=1] field not None):
+    cdef unsigned int N = len(field)
+    cdef np.ndarray[DTYPE_t, ndim=1] mag = np.zeros((N), dtype=DTYPE)
+    cdef int i
+    for i in range(N):
+        mag[i] = tanh(field[i])
+    return mag
+
+
+@cython.boundscheck(False)
 def mag_chain_uncoupled(np.ndarray[DTYPE_t, ndim=1] h not None,
                 float hext):
     cdef float magtot=0
