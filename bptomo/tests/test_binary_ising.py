@@ -19,31 +19,33 @@ def test_full_reco_can():
     im[~mask] = 0
     # Build projection data
     n_dir = 16
-    op = build_projection_operator(L, n_dir)
-    y = (op * im.ravel()[:, np.newaxis]).ravel()
+    op = build_projection_operator(L, n_dir, mask=mask)
+    y = (op * im[mask][:, np.newaxis]).ravel()
     sums = []
     op = sparse.lil_matrix(op)
     # Update after all measures
-    h_m_to_px = _initialize_field(y, op)
+    h_m_to_px = _initialize_field(y, L, op)
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
     hext = np.zeros_like(y)
     for i in range(6):
         print "iter %d" %i
         h_m_to_px, h_px_to_m, h_sum, hext = \
-                    BP_step(h_m_to_px, h_px_to_m, y, op, hext=hext)
+                    BP_step(h_m_to_px, h_px_to_m, y, op, L, hext=hext)
         sums.append(h_sum)
-    err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
+    err = [np.abs((sumi>0) - (im>0)[mask]).sum() for sumi in sums]
     assert err[-1] == 0
     # Use the Parallel algorithm
+    """
     sums = []
-    h_m_to_px = _initialize_field(y, op)
+    h_m_to_px = _initialize_field(y, L, op)
     h_px_to_m, first_sum = _calc_hatf(h_m_to_px)
     hext = np.zeros_like(y)
     for i in range(6):
         print "iter %d" %i
         h_m_to_px, h_px_to_m, h_sum, hext = \
-                    BP_step_parallel(h_m_to_px, h_px_to_m, y, op, hext=hext)
+                    BP_step_parallel(h_m_to_px, h_px_to_m, y, op, L, hext=hext)
         sums.append(h_sum)
-    err = [np.abs((sumi>0) - (im>0).ravel()).sum() for sumi in sums]
+    err = [np.abs((sumi>0) - (im>0)[mask]).sum() for sumi in sums]
     print err
     assert err[-1] == 0
+    """

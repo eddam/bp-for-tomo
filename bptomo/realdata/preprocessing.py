@@ -133,7 +133,7 @@ def bin_mask(mask, bin_size=2):
     return bin_mask > 0.5
 
 
-def rescale_sino_to_binary(sino, v_down, v_up, mask=None):
+def rescale_sino_to_binary(sino, v_down, v_up, mask=None, op=None):
     """
     Transform an experimental sinogram obtained from a binary object
     with levels v_down and v_up, to the sinogram obtained from an object
@@ -170,11 +170,10 @@ def rescale_sino_to_binary(sino, v_down, v_up, mask=None):
         v_down = tmp
     a = 2. / (v_up - v_down)
     b = 1 - 2. * float(v_up) / (v_up - v_down)
-    print a, b
     n_dir, l_x = sino.shape
-    op = build_projection_operator.build_projection_operator(l_x,
+    if op is None:
+        op = build_projection_operator.build_projection_operator(l_x,
                                         n_dir, mask=mask)
-    print op.shape
     lengths_of_rays = np.array(op.sum(axis=1)).reshape(sino.shape)
     rescaled_sino = a * sino + b * lengths_of_rays
     return rescaled_sino, lengths_of_rays

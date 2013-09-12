@@ -107,6 +107,22 @@ def fast_mag_chain_nu(np.ndarray[DTYPE_t, ndim=1] h not None, np.ndarray[DTYPE_t
     return magtot, hloc
 
 @cython.boundscheck(False)
+def simple_ising(np.ndarray[DTYPE_t, ndim=1] h not None, float J):
+    cdef unsigned int N = len(h)
+    cdef np.ndarray[DTYPE_t, ndim=1] u = np.zeros(N, dtype=DTYPE)
+    cdef np.ndarray[DTYPE_t, ndim=1] v = np.zeros(N, dtype=DTYPE)
+    cdef int i
+    cdef np.ndarray[DTYPE_t, ndim=1] hloc = np.zeros(N, dtype=DTYPE)
+    for i in range(1, N):
+        u[i] = fast_atanh_th_th(J, u[i - 1] + h[i - 1])
+    for i in range(N - 2, 0, -1):
+        v[i] = fast_atanh_th_th(J, v[i + 1] + h[i + 1])
+    for i in range(N):
+        hloc[i] = u[i] + v[i]
+    return hloc
+
+
+@cython.boundscheck(False)
 def fast_mag_chain_derivative(np.ndarray[DTYPE_t, ndim=1] h not None, np.ndarray[DTYPE_t, ndim=1] J not None, float hext):
     cdef int N = len(h)
     cdef np.ndarray[DTYPE_t, ndim=1] u = np.zeros((N), dtype=DTYPE)
